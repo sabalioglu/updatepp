@@ -1,385 +1,379 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, Text, View, Image, ScrollView, TouchableOpacity } from 'react-native';
-import { usePantryItems } from '@/hooks/usePantryItems';
-import { useRecipes } from '@/hooks/useRecipes';
-import { CircleAlert as AlertCircle, ArrowRight, ShoppingBag, Utensils } from 'lucide-react-native';
-import { theme } from '@/constants/theme';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useUserProfile } from '@/hooks/useUserProfile';
+import { useRecipeRecommendations } from '@/hooks/useRecipeRecommendations';
+import { usePantryItems } from '@/hooks/usePantryItems';
 import ScreenContainer from '@/components/common/ScreenContainer';
 import Header from '@/components/common/Header';
-import { PantryItem, Recipe } from '@/types';
-import { format } from 'date-fns';
+import ProfileCard from '@/components/profile/ProfileCard';
+import RecommendationCard from '@/components/profile/RecommendationCard';
+import QuickStatsCard from '@/components/profile/QuickStatsCard';
+import OnboardingModal from '@/components/profile/OnboardingModal';
+import { theme } from '@/constants/theme';
+import { Settings, TrendingUp, Heart, Clock, ChefHat } from 'lucide-react-native';
 
-export default function HomeScreen() {
+export default function ProfileScreen() {
   const router = useRouter();
-  const { items, loading: pantryLoading, getExpiringItems, getExpiredItems } = usePantryItems();
-  const { recipes, loading: recipesLoading, findRecipesFromPantry } = useRecipes();
-  
-  const expiringItems = getExpiringItems();
-  const expiredItems = getExpiredItems();
-  const suggestedRecipes = findRecipesFromPantry(items).slice(0, 3);
-  const favoriteRecipes = recipes.filter(recipe => recipe.favorite).slice(0, 3);
+  const { profile, loading: profileLoading, updateProfile } = useUserProfile();
+  const { items } = usePantryItems();
+  const { recommendations, loading: recommendationsLoading, refreshRecommendations } = useRecipeRecommendations();
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  const handlePantryItemPress = (item: PantryItem) => {
-    // Navigate to pantry item details (would be implemented in a real app)
-    router.push('/pantry');
+  useEffect(() => {
+    if (profile && !profile.onboardingCompleted) {
+      setShowOnboarding(true);
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    if (profile?.onboardingCompleted) {
+      refreshRecommendations();
+    }
+  }, [profile?.onboardingCompleted, refreshRecommendations]);
+
+  const handleCompleteOnboarding = async (updatedProfile: any) => {
+    await updateProfile({
+      ...updatedProfile,
+      onboardingCompleted: true,
+      updatedAt: new Date().toISOString(),
+    });
+    setShowOnboarding(false);
   };
 
-  const handleRecipePress = (recipe: Recipe) => {
-    // Navigate to recipe details (would be implemented in a real app)
-    router.push('/recipes');
+  const handleEditProfile = () => {
+    router.push('/profile/edit');
   };
+
+  const handleViewRecommendation = (recipeId: string) => {
+    router.push(`/recipes/${recipeId}`);
+  };
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  const getPersonalizedMessage = () => {
+    if (!profile?.onboardingCompleted) {
+      return "Let's set up your profile to get personalized recipe recommendations!";
+    }
+
+    const messages = [
+      "Here are some recipes tailored just for you!",
+      "Based on your preferences, we found these perfect matches.",
+      "Your personalized cooking journey continues!",
+      "Discover new flavors that match your taste!",
+    ];
+
+    return messages[Math.floor(Math.random() * messages.length)];
+  };
+
+  if (profileLoading) {
+    return (
+      <ScreenContainer>
+        <Header title="Profile" />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading your profile...</Text>
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer>
-      <Header title="Pantry Pal" showSearch />
+      <Header 
+        title="Pantry Pal" 
+        showAdd={false}
+        showSearch={false}
+      />
       
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Waste Prevention Alert */}
-        {(expiringItems.length > 0 || expiredItems.length > 0) && (
-          <View style={styles.alertContainer}>
-            <View style={styles.alertHeader}>
-              <AlertCircle size={24} color={theme.colors.warning} />
-              <Text style={styles.alertTitle}>Food Waste Alert</Text>
+        {/* Greeting Section */}
+        <View style={styles.greetingSection}>
+          <Text style={styles.greetingText}>
+            {getGreeting()}{profile?.name ? `, ${profile.name}` : ''}!
+          </Text>
+          <Text style={styles.messageText}>{getPersonalizedMessage()}</Text>
+        </View>
+
+        {/* Profile Card */}
+        <ProfileCard 
+          profile={profile}
+          onEdit={handleEditProfile}
+          onSetupProfile={() => setShowOnboarding(true)}
+        />
+
+        {/* Quick Stats */}
+        <QuickStatsCard 
+          profile={profile}
+          pantryItemsCount={items.length}
+          recommendationsCount={recommendations.length}
+        />
+
+        {/* Personalized Recommendations */}
+        {profile?.onboardingCompleted && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <TrendingUp size={20} color={theme.colors.primary} />
+                <Text style={styles.sectionTitle}>Recommended for You</Text>
+              </View>
+              <TouchableOpacity onPress={() => router.push('/recipes')}>
+                <Text style={styles.seeAllText}>See All</Text>
+              </TouchableOpacity>
             </View>
-            
-            <Text style={styles.alertText}>
-              {expiredItems.length > 0 
-                ? `You have ${expiredItems.length} expired items and ${expiringItems.length} items expiring soon.` 
-                : `You have ${expiringItems.length} items expiring soon.`}
-            </Text>
-            
-            <TouchableOpacity 
-              style={styles.alertButton}
-              onPress={() => router.push('/pantry')}
-            >
-              <Text style={styles.alertButtonText}>View Items</Text>
-            </TouchableOpacity>
+
+            {recommendationsLoading ? (
+              <View style={styles.loadingRecommendations}>
+                <Text style={styles.loadingText}>Finding perfect recipes for you...</Text>
+              </View>
+            ) : recommendations.length > 0 ? (
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.recommendationsScroll}
+              >
+                {recommendations.slice(0, 5).map((recommendation) => (
+                  <RecommendationCard
+                    key={recommendation.recipe.id}
+                    recommendation={recommendation}
+                    onPress={() => handleViewRecommendation(recommendation.recipe.id)}
+                  />
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.emptyRecommendations}>
+                <ChefHat size={48} color={theme.colors.gray[400]} />
+                <Text style={styles.emptyTitle}>No recommendations yet</Text>
+                <Text style={styles.emptyText}>
+                  Add more items to your pantry or update your preferences to get personalized recommendations.
+                </Text>
+                <TouchableOpacity 
+                  style={styles.emptyButton}
+                  onPress={() => router.push('/pantry')}
+                >
+                  <Text style={styles.emptyButtonText}>Go to Pantry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
-        
-        {/* Meal Suggestion */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Cook With What You Have</Text>
-            <TouchableOpacity onPress={() => router.push('/recipes')}>
-              <ArrowRight size={20} color={theme.colors.primary} />
-            </TouchableOpacity>
-          </View>
-          
-          {suggestedRecipes.length > 0 ? (
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false} 
-              contentContainerStyle={styles.horizontalScrollContent}
-            >
-              {suggestedRecipes.map(recipe => (
-                <TouchableOpacity 
-                  key={recipe.id} 
-                  style={styles.recipeCard}
-                  onPress={() => handleRecipePress(recipe)}
-                >
-                  <Image source={{ uri: recipe.image }} style={styles.recipeImage} />
-                  <View style={styles.recipeCardContent}>
-                    <Text style={styles.recipeCardTitle} numberOfLines={1}>{recipe.name}</Text>
-                    <View style={styles.recipeCardMeta}>
-                      <Utensils size={14} color={theme.colors.gray[600]} />
-                      <Text style={styles.recipeCardMetaText}>
-                        {recipe.prepTime + recipe.cookTime} min
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                Add more items to your pantry to get recipe suggestions.
-              </Text>
-              <TouchableOpacity 
-                style={styles.emptyButton}
-                onPress={() => router.push('/pantry')}
-              >
-                <Text style={styles.emptyButtonText}>Go to Pantry</Text>
-              </TouchableOpacity>
+
+        {/* Health Insights */}
+        {profile?.onboardingCompleted && profile.healthGoals && profile.healthGoals.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <Heart size={20} color={theme.colors.error} />
+                <Text style={styles.sectionTitle}>Health Insights</Text>
+              </View>
             </View>
-          )}
-        </View>
-        
-        {/* Favorite Recipes */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Your Favorite Recipes</Text>
-            <TouchableOpacity onPress={() => router.push('/recipes')}>
-              <ArrowRight size={20} color={theme.colors.primary} />
-            </TouchableOpacity>
-          </View>
-          
-          {favoriteRecipes.length > 0 ? (
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false} 
-              contentContainerStyle={styles.horizontalScrollContent}
-            >
-              {favoriteRecipes.map(recipe => (
-                <TouchableOpacity 
-                  key={recipe.id} 
-                  style={styles.recipeCard}
-                  onPress={() => handleRecipePress(recipe)}
-                >
-                  <Image source={{ uri: recipe.image }} style={styles.recipeImage} />
-                  <View style={styles.recipeCardContent}>
-                    <Text style={styles.recipeCardTitle} numberOfLines={1}>{recipe.name}</Text>
-                    <View style={styles.recipeCardMeta}>
-                      <Utensils size={14} color={theme.colors.gray[600]} />
-                      <Text style={styles.recipeCardMetaText}>
-                        {recipe.prepTime + recipe.cookTime} min
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                You haven't favorited any recipes yet.
+            
+            <View style={styles.healthInsights}>
+              <Text style={styles.insightText}>
+                Based on your {profile.healthGoals.join(', ')} goals, we're focusing on recipes that support your journey.
               </Text>
-              <TouchableOpacity 
-                style={styles.emptyButton}
-                onPress={() => router.push('/recipes')}
-              >
-                <Text style={styles.emptyButtonText}>Explore Recipes</Text>
-              </TouchableOpacity>
+              
+              {profile.dailyCaloricNeeds && (
+                <View style={styles.calorieInfo}>
+                  <Text style={styles.calorieLabel}>Daily Caloric Target:</Text>
+                  <Text style={styles.calorieValue}>{profile.dailyCaloricNeeds} calories</Text>
+                </View>
+              )}
             </View>
-          )}
-        </View>
-        
-        {/* Expiring Soon */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Use Soon</Text>
-            <TouchableOpacity onPress={() => router.push('/pantry')}>
-              <ArrowRight size={20} color={theme.colors.primary} />
-            </TouchableOpacity>
           </View>
-          
-          {expiringItems.length > 0 ? (
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false} 
-              contentContainerStyle={styles.horizontalScrollContent}
-            >
-              {expiringItems.map(item => (
-                <TouchableOpacity 
-                  key={item.id} 
-                  style={styles.pantryItemCard}
-                  onPress={() => handlePantryItemPress(item)}
-                >
-                  {item.image ? (
-                    <Image source={{ uri: item.image }} style={styles.pantryItemImage} />
-                  ) : (
-                    <View style={[styles.pantryItemImage, styles.pantryItemPlaceholder]} />
-                  )}
-                  
-                  <View style={styles.pantryItemContent}>
-                    <Text style={styles.pantryItemName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.pantryItemExpiry}>
-                      Expires: {format(new Date(item.expiryDate || ''), 'MMM d')}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                No items expiring soon.
-              </Text>
-            </View>
-          )}
-        </View>
-        
+        )}
+
         {/* Quick Actions */}
-        <View style={styles.quickActionsContainer}>
+        <View style={styles.quickActions}>
           <TouchableOpacity 
-            style={styles.quickActionButton}
+            style={styles.actionButton}
+            onPress={() => router.push('/meal-plan')}
+          >
+            <Calendar size={24} color="white" />
+            <Text style={styles.actionText}>Plan Meals</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionButton, { backgroundColor: theme.colors.secondary }]}
             onPress={() => router.push('/shopping-list')}
           >
             <ShoppingBag size={24} color="white" />
-            <Text style={styles.quickActionText}>Shopping List</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.quickActionButton, { backgroundColor: theme.colors.secondary }]}
-            onPress={() => router.push('/meal-plan')}
-          >
-            <Utensils size={24} color="white" />
-            <Text style={styles.quickActionText}>Meal Plan</Text>
+            <Text style={styles.actionText}>Shopping List</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Settings Button */}
+        <TouchableOpacity 
+          style={styles.settingsButton}
+          onPress={() => router.push('/profile/settings')}
+        >
+          <Settings size={20} color={theme.colors.gray[600]} />
+          <Text style={styles.settingsText}>Settings & Privacy</Text>
+        </TouchableOpacity>
       </ScrollView>
+
+      {/* Onboarding Modal */}
+      <OnboardingModal
+        visible={showOnboarding}
+        onComplete={handleCompleteOnboarding}
+        onSkip={() => setShowOnboarding(false)}
+        initialProfile={profile}
+      />
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  alertContainer: {
-    backgroundColor: theme.colors.expirySoon,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  alertHeader: {
-    flexDirection: 'row',
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 16,
+    color: theme.colors.gray[600],
+  },
+  greetingSection: {
+    marginBottom: theme.spacing.lg,
+  },
+  greetingText: {
+    fontFamily: 'Poppins-Bold',
+    fontSize: 24,
+    color: theme.colors.text,
     marginBottom: theme.spacing.xs,
   },
-  alertTitle: {
-    fontFamily: 'Poppins-SemiBold',
-    fontSize: 16,
-    color: theme.colors.warning,
-    marginLeft: theme.spacing.xs,
-  },
-  alertText: {
+  messageText: {
     fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
+    fontSize: 16,
+    color: theme.colors.gray[600],
+    lineHeight: 22,
   },
-  alertButton: {
-    backgroundColor: theme.colors.warning,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.borderRadius.sm,
-    alignSelf: 'flex-start',
-  },
-  alertButtonText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 14,
-    color: 'white',
-  },
-  sectionContainer: {
+  section: {
     marginBottom: theme.spacing.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   sectionTitle: {
     fontFamily: 'Poppins-SemiBold',
     fontSize: 18,
     color: theme.colors.text,
   },
-  horizontalScrollContent: {
+  seeAllText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: theme.colors.primary,
+  },
+  loadingRecommendations: {
+    padding: theme.spacing.xl,
+    alignItems: 'center',
+  },
+  recommendationsScroll: {
     paddingRight: theme.spacing.md,
   },
-  recipeCard: {
-    width: 180,
-    marginRight: theme.spacing.md,
-    backgroundColor: 'white',
-    borderRadius: theme.borderRadius.md,
-    overflow: 'hidden',
-    ...theme.shadows.sm,
-  },
-  recipeImage: {
-    width: '100%',
-    height: 120,
-  },
-  recipeCardContent: {
-    padding: theme.spacing.sm,
-  },
-  recipeCardTitle: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 14,
-    color: theme.colors.text,
-    marginBottom: 4,
-  },
-  recipeCardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  recipeCardMetaText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-    color: theme.colors.gray[600],
-    marginLeft: 4,
-  },
-  pantryItemCard: {
-    width: 140,
-    marginRight: theme.spacing.md,
-    backgroundColor: 'white',
-    borderRadius: theme.borderRadius.md,
-    overflow: 'hidden',
-    ...theme.shadows.sm,
-  },
-  pantryItemImage: {
-    width: '100%',
-    height: 100,
-  },
-  pantryItemPlaceholder: {
-    backgroundColor: theme.colors.gray[200],
-  },
-  pantryItemContent: {
-    padding: theme.spacing.sm,
-  },
-  pantryItemName: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 14,
-    color: theme.colors.text,
-    marginBottom: 2,
-  },
-  pantryItemExpiry: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-    color: theme.colors.warning,
-  },
-  emptyContainer: {
+  emptyRecommendations: {
     backgroundColor: theme.colors.gray[100],
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.xl,
     alignItems: 'center',
+  },
+  emptyTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 18,
+    color: theme.colors.text,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
   },
   emptyText: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
     color: theme.colors.gray[600],
     textAlign: 'center',
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
+    lineHeight: 20,
   },
   emptyButton: {
     backgroundColor: theme.colors.primary,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.borderRadius.sm,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.borderRadius.md,
   },
   emptyButtonText: {
     fontFamily: 'Inter-Medium',
     fontSize: 14,
     color: 'white',
   },
-  quickActionsContainer: {
+  healthInsights: {
+    backgroundColor: theme.colors.fresh,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+  },
+  insightText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: theme.colors.text,
+    lineHeight: 20,
+    marginBottom: theme.spacing.sm,
+  },
+  calorieInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: theme.spacing.md,
+    alignItems: 'center',
   },
-  quickActionButton: {
+  calorieLabel: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: theme.colors.gray[700],
+  },
+  calorieValue: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: theme.colors.success,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.lg,
+    gap: theme.spacing.md,
+  },
+  actionButton: {
     backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    marginHorizontal: theme.spacing.xs,
     ...theme.shadows.md,
   },
-  quickActionText: {
+  actionText: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 14,
     color: 'white',
     marginTop: theme.spacing.xs,
+  },
+  settingsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  settingsText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: theme.colors.gray[600],
   },
 });

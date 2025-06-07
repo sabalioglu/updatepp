@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PantryItem, Recipe, MealPlan, ShoppingListItem } from '@/types';
+import { PantryItem, Recipe, MealPlan, ShoppingListItem, UserProfile } from '@/types';
 import { mockPantryItems, mockRecipes, mockMealPlans, mockShoppingList } from './mockData';
 
 // Storage keys
@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   RECIPES: 'recipes',
   MEAL_PLANS: 'meal_plans',
   SHOPPING_LIST: 'shopping_list',
+  USER_PROFILE: 'user_profile',
 };
 
 // Initialize storage with mock data if empty
@@ -50,6 +51,59 @@ export const initializeStorage = async () => {
     }
   } catch (error) {
     console.error('Error initializing storage:', error);
+  }
+};
+
+// User Profile Storage Functions
+export const initializeUserProfile = async () => {
+  try {
+    const profile = await AsyncStorage.getItem(STORAGE_KEYS.USER_PROFILE);
+    if (!profile) {
+      const defaultProfile: UserProfile = {
+        id: 'user-1',
+        name: '',
+        dietaryPreferences: [],
+        allergies: [],
+        intolerances: [],
+        dietaryRestrictions: [],
+        cuisinePreferences: [],
+        cookingSkillLevel: 'beginner',
+        preferredMealTypes: [],
+        weeklyMealFrequency: 7,
+        servingSizePreference: 2,
+        dislikedIngredients: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        onboardingCompleted: false,
+        privacySettings: {
+          shareHealthData: false,
+          sharePreferences: true,
+          allowAnalytics: true,
+        },
+      };
+      
+      await AsyncStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(defaultProfile));
+    }
+  } catch (error) {
+    console.error('Error initializing user profile:', error);
+  }
+};
+
+export const getUserProfile = async (): Promise<UserProfile | null> => {
+  try {
+    const profile = await AsyncStorage.getItem(STORAGE_KEYS.USER_PROFILE);
+    return profile ? JSON.parse(profile) : null;
+  } catch (error) {
+    console.error('Error getting user profile:', error);
+    return null;
+  }
+};
+
+export const saveUserProfile = async (profile: UserProfile): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(profile));
+  } catch (error) {
+    console.error('Error saving user profile:', error);
   }
 };
 

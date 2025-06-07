@@ -11,7 +11,7 @@ import RecommendationCard from '@/components/profile/RecommendationCard';
 import QuickStatsCard from '@/components/profile/QuickStatsCard';
 import OnboardingModal from '@/components/profile/OnboardingModal';
 import { theme } from '@/constants/theme';
-import { Settings, TrendingUp, Heart, Clock, ChefHat } from 'lucide-react-native';
+import { Settings, TrendingUp, Heart, Clock, ChefHat, Calendar, ShoppingBag } from 'lucide-react-native';
 
 export default function ProfileScreen() {
   const router = useRouter();

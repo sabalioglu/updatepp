@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
 import { UserProfile } from '@/types';
 import { theme } from '@/constants/theme';
-import { Edit3, User, Settings } from 'lucide-react-native';
+import { CreditCard as Edit3, User, Settings } from 'lucide-react-native';
 
 interface ProfileCardProps {
   profile: UserProfile | null;

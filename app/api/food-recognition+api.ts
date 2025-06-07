@@ -12,11 +12,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey = process.env.EXPO_PUBLIC_OPENROUTER_API_KEY;
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
     
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: 'OpenRouter API key not configured' }),
+        JSON.stringify({ error: 'Gemini API key not configured' }),
         {
           status: 500,
           headers: { 'Content-Type': 'application/json' },
@@ -60,47 +60,41 @@ Format your response as JSON with this structure:
   ],
   "storageTips": ["tip1", "tip2"],
   "complementaryIngredients": ["ingredient1", "ingredient2"]
-}`;
+}
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+Please analyze this food image and provide recipe suggestions.`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://pantry-pal.app',
-        'X-Title': 'Pantry Pal Food Recognition',
       },
       body: JSON.stringify({
-        model: 'google/gemini-flash-1.5',
-        messages: [
+        contents: [
           {
-            role: 'system',
-            content: systemPrompt
-          },
-          {
-            role: 'user',
-            content: [
+            parts: [
               {
-                type: 'text',
-                text: 'Please analyze this food image and provide recipe suggestions.'
+                text: systemPrompt
               },
               {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64}`
+                inline_data: {
+                  mime_type: "image/jpeg",
+                  data: imageBase64
                 }
               }
             ]
           }
         ],
-        max_tokens: 1000,
-        temperature: 0.7,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1000,
+        }
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('OpenRouter API error:', errorData);
+      console.error('Gemini API error:', errorData);
       return new Response(
         JSON.stringify({ error: 'Failed to analyze image' }),
         {
@@ -111,7 +105,7 @@ Format your response as JSON with this structure:
     }
 
     const data = await response.json();
-    const aiResponse = data.choices?.[0]?.message?.content;
+    const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!aiResponse) {
       return new Response(
@@ -126,7 +120,9 @@ Format your response as JSON with this structure:
     // Try to parse the JSON response from the AI
     let parsedResponse;
     try {
-      parsedResponse = JSON.parse(aiResponse);
+      // Clean the response in case it has markdown formatting
+      const cleanedResponse = aiResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsedResponse = JSON.parse(cleanedResponse);
     } catch (parseError) {
       // If JSON parsing fails, return a structured error
       parsedResponse = {

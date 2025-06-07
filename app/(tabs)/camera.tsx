@@ -44,7 +44,7 @@ export default function CameraScreen() {
   if (!permission) {
     return (
       <ScreenContainer>
-        <Header title="Camera\" showBack onBackPress={() => router.back()} />
+        <Header title="Camera" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading camera permissions...</Text>
         </View>

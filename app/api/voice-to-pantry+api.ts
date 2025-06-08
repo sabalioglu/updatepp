@@ -2,7 +2,18 @@ export async function POST(request: Request) {
   try {
     const { audioBase64, transcription } = await request.json();
     
-    if (!transcription && !audioBase64) {
+    // If transcription is already provided, return it directly
+    if (transcription) {
+      return new Response(
+        JSON.stringify({ transcription: transcription.trim() }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+    
+    if (!audioBase64) {
       return new Response(
         JSON.stringify({ error: 'No audio data or transcription provided' }),
         {
@@ -24,50 +35,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Use transcription if provided, otherwise we'd need to transcribe audio first
-    const textToAnalyze = transcription || "Unable to transcribe audio";
-
-    const systemPrompt = `You are a pantry management AI for Pantry Pal. Your ONLY purpose is to:
-
-1. Extract food items from voice transcriptions
-2. Determine quantities, units, and categories
-3. Estimate expiry dates based on typical food storage
-4. Structure data for pantry inventory
-
-STRICT RULES:
-- ONLY process food-related voice notes
-- Extract specific food items with quantities when mentioned
-- Assign appropriate food categories
-- Estimate realistic expiry dates
-- If no food items are mentioned, return empty arrays
-
-When analyzing voice transcriptions:
-1. Identify all food items mentioned
-2. Extract quantities and units (estimate if not specified)
-3. Assign appropriate categories (fruits, vegetables, dairy, meat, etc.)
-4. Calculate expiry dates based on typical storage life
-5. Generate helpful notes from the voice content
-
-Format your response as JSON with this structure:
-{
-  "pantryItems": [
-    {
-      "name": "Food Item Name",
-      "quantity": 2,
-      "unit": "pcs",
-      "category": "fruits",
-      "estimatedExpiryDays": 7,
-      "notes": "User mentioned: fresh from farmers market"
-    }
-  ],
-  "summary": "Added 3 items to pantry from voice note",
-  "suggestions": [
-    "Store bananas at room temperature",
-    "Keep milk refrigerated"
-  ]
-}
-
-Voice transcription to analyze: "${textToAnalyze}"`;
+    // Simple transcription prompt - only ask for raw text
+    const transcriptionPrompt = `Transcribe the following audio into plain text. Return only the raw transcription, no summary, analysis, or additional comments. If the audio is not clear, transcribe as accurately as possible.`;
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
@@ -79,13 +48,19 @@ Voice transcription to analyze: "${textToAnalyze}"`;
           {
             parts: [
               {
-                text: systemPrompt
+                text: transcriptionPrompt
+              },
+              {
+                inline_data: {
+                  mime_type: "audio/wav", // Support both wav and mp3
+                  data: audioBase64
+                }
               }
             ]
           }
         ],
         generationConfig: {
-          temperature: 0.3,
+          temperature: 0.1, // Low temperature for accurate transcription
           maxOutputTokens: 1000,
         }
       }),
@@ -95,7 +70,7 @@ Voice transcription to analyze: "${textToAnalyze}"`;
       const errorData = await response.text();
       console.error('Gemini API error:', errorData);
       return new Response(
-        JSON.stringify({ error: 'Failed to analyze voice note' }),
+        JSON.stringify({ error: 'Failed to transcribe audio' }),
         {
           status: response.status,
           headers: { 'Content-Type': 'application/json' },
@@ -104,11 +79,11 @@ Voice transcription to analyze: "${textToAnalyze}"`;
     }
 
     const data = await response.json();
-    const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const rawTranscription = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!aiResponse) {
+    if (!rawTranscription) {
       return new Response(
-        JSON.stringify({ error: 'No response from AI' }),
+        JSON.stringify({ error: 'No transcription received from AI' }),
         {
           status: 500,
           headers: { 'Content-Type': 'application/json' },
@@ -116,21 +91,11 @@ Voice transcription to analyze: "${textToAnalyze}"`;
       );
     }
 
-    // Try to parse the JSON response from the AI
-    let parsedResponse;
-    try {
-      const cleanedResponse = aiResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      parsedResponse = JSON.parse(cleanedResponse);
-    } catch (parseError) {
-      parsedResponse = {
-        pantryItems: [],
-        summary: 'Unable to extract food items from voice note',
-        suggestions: ['Please try speaking more clearly about specific food items']
-      };
-    }
-
+    // Return only the raw transcription, cleaned of any extra whitespace
     return new Response(
-      JSON.stringify(parsedResponse),
+      JSON.stringify({ 
+        transcription: rawTranscription.trim() 
+      }),
       {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -138,7 +103,7 @@ Voice transcription to analyze: "${textToAnalyze}"`;
     );
 
   } catch (error) {
-    console.error('Voice to pantry API error:', error);
+    console.error('Voice transcription API error:', error);
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       {

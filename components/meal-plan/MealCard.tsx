@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Meal } from '@/types';
 import { theme } from '@/constants/theme';
-import { Edit3, Trash2, Clock } from 'lucide-react-native';
+import { CreditCard as Edit3, Trash2, Clock } from 'lucide-react-native';
 
 interface MealCardProps {
   meal: Meal;

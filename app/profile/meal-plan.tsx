@@ -240,7 +240,7 @@ export default function MealPlanScreen() {
   if (loading) {
     return (
       <ScreenContainer>
-        <Header title="Meal Plan" showBack onBackPress={() => router.back()} />
+        <Header title="Meal Plan\" showBack onBackPress={() => router.back()} />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading meal plans...</Text>
         </View>

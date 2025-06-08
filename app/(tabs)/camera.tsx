@@ -5,12 +5,14 @@ import { useRouter } from 'expo-router';
 import ScreenContainer from '@/components/common/ScreenContainer';
 import Header from '@/components/common/Header';
 import FoodAnalysisModal from '@/components/camera/FoodAnalysisModal';
+import CalorieCounterModal from '@/components/camera/CalorieCounterModal';
 import { theme } from '@/constants/theme';
-import { Camera as CameraIcon, RotateCcw, Video, Square, Circle, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles } from 'lucide-react-native';
+import { Camera as CameraIcon, RotateCcw, Video, Square, Circle, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator } from 'lucide-react-native';
 import * as FileSystem from 'expo-file-system';
 
 type CaptureMode = 'photo' | 'video';
 type FlashMode = 'off' | 'on' | 'auto';
+type AnalysisMode = 'food' | 'calorie';
 
 interface FoodAnalysisResult {
   identifiedFoods: string[];
@@ -26,6 +28,26 @@ interface FoodAnalysisResult {
   complementaryIngredients: string[];
 }
 
+interface CalorieAnalysisResult {
+  identifiedFoods: Array<{
+    name: string;
+    quantity: string;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fiber: number;
+  }>;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  totalFiber: number;
+  mealType: string;
+  healthScore: number;
+  nutritionalTips: string[];
+}
+
 export default function CameraScreen() {
   const router = useRouter();
   const [facing, setFacing] = useState<CameraType>('back');
@@ -36,7 +58,9 @@ export default function CameraScreen() {
   const [capturedMedia, setCapturedMedia] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'photo' | 'video' | null>(null);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
+  const [showCalorieModal, setShowCalorieModal] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<FoodAnalysisResult | null>(null);
+  const [calorieResult, setCalorieResult] = useState<CalorieAnalysisResult | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
@@ -44,7 +68,7 @@ export default function CameraScreen() {
   if (!permission) {
     return (
       <ScreenContainer>
-        <Header title="Camera\" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading camera permissions...</Text>
         </View>
@@ -55,12 +79,12 @@ export default function CameraScreen() {
   if (!permission.granted) {
     return (
       <ScreenContainer>
-        <Header title="Camera" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <CameraIcon size={64} color={theme.colors.gray[400]} />
           <Text style={styles.permissionTitle}>Camera Access Required</Text>
           <Text style={styles.permissionText}>
-            We need access to your camera to take photos and analyze food items for recipe suggestions.
+            We need access to your camera to take photos, analyze food items, and count calories.
           </Text>
           <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
             <Text style={styles.permissionButtonText}>Grant Permission</Text>
@@ -157,6 +181,7 @@ export default function CameraScreen() {
     setCapturedMedia(null);
     setMediaType(null);
     setAnalysisResult(null);
+    setCalorieResult(null);
     setAnalysisError(null);
   };
 
@@ -229,6 +254,46 @@ export default function CameraScreen() {
     }
   };
 
+  const countCalories = async () => {
+    if (!capturedMedia || mediaType !== 'photo') {
+      setAnalysisError('Only photos can be analyzed for calorie counting');
+      return;
+    }
+
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    setShowCalorieModal(true);
+
+    try {
+      // Convert image to base64 using platform-specific method
+      const base64 = await convertImageToBase64(capturedMedia);
+
+      // Call our API route for calorie counting
+      const response = await fetch('/api/calorie-counter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageBase64: base64,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to analyze calories');
+      }
+
+      const result = await response.json();
+      setCalorieResult(result);
+    } catch (error) {
+      console.error('Calorie analysis error:', error);
+      setAnalysisError(error instanceof Error ? error.message : 'Failed to analyze calories');
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
+
   const useMedia = () => {
     // In a real app, you would save this media or pass it to another screen
     // For now, we'll just show an alert and go back
@@ -272,13 +337,23 @@ export default function CameraScreen() {
             </TouchableOpacity>
             
             {mediaType === 'photo' && (
-              <TouchableOpacity 
-                style={[styles.previewActionButton, styles.analyzeButton]} 
-                onPress={analyzeFood}
-              >
-                <Sparkles size={24} color="white" />
-                <Text style={styles.previewActionText}>Analyze Food</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity 
+                  style={[styles.previewActionButton, styles.analyzeButton]} 
+                  onPress={analyzeFood}
+                >
+                  <Sparkles size={24} color="white" />
+                  <Text style={styles.previewActionText}>Analyze Food</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.previewActionButton, styles.calorieButton]} 
+                  onPress={countCalories}
+                >
+                  <Calculator size={24} color="white" />
+                  <Text style={styles.previewActionText}>Count Calories</Text>
+                </TouchableOpacity>
+              </>
             )}
             
             <TouchableOpacity 
@@ -298,13 +373,21 @@ export default function CameraScreen() {
           loading={analysisLoading}
           error={analysisError}
         />
+
+        <CalorieCounterModal
+          visible={showCalorieModal}
+          onClose={() => setShowCalorieModal(false)}
+          analysisResult={calorieResult}
+          loading={analysisLoading}
+          error={analysisError}
+        />
       </ScreenContainer>
     );
   }
 
   return (
     <ScreenContainer scrollable={false} style={styles.container}>
-      <Header title="Camera" showBack onBackPress={() => router.back()} />
+      <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
       
       <View style={styles.cameraContainer}>
         <CameraView 
@@ -332,6 +415,17 @@ export default function CameraScreen() {
             <TouchableOpacity style={styles.controlButton} onPress={toggleCameraFacing}>
               <RotateCw size={24} color="white" />
             </TouchableOpacity>
+          </View>
+
+          {/* Center Info */}
+          <View style={styles.centerInfo}>
+            <View style={styles.infoCard}>
+              <Calculator size={32} color={theme.colors.primary} />
+              <Text style={styles.infoTitle}>Calorie Counter</Text>
+              <Text style={styles.infoText}>
+                Take a photo of your meal to get detailed nutritional information and calorie count
+              </Text>
+            </View>
           </View>
 
           {/* Bottom Controls */}
@@ -440,6 +534,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'white',
   },
+  centerInfo: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.xl,
+  },
+  infoCard: {
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    alignItems: 'center',
+    maxWidth: 280,
+  },
+  infoTitle: {
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 20,
+    color: 'white',
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+  infoText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   bottomControls: {
     position: 'absolute',
     bottom: 50,
@@ -503,25 +624,28 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.sm,
   },
   previewActionButton: {
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     borderRadius: theme.borderRadius.md,
     paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
     alignItems: 'center',
-    minWidth: 80,
+    minWidth: 70,
   },
   analyzeButton: {
     backgroundColor: theme.colors.secondary,
+  },
+  calorieButton: {
+    backgroundColor: theme.colors.accent,
   },
   useButton: {
     backgroundColor: theme.colors.primary,
   },
   previewActionText: {
     fontFamily: 'Inter-Medium',
-    fontSize: 12,
+    fontSize: 11,
     color: 'white',
     marginTop: theme.spacing.xs,
     textAlign: 'center',

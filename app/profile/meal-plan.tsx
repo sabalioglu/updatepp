@@ -84,7 +84,7 @@ export default function MealPlanScreen() {
 
   return (
     <ScreenContainer scrollable={false} style={styles.container}>
-      <Header title="Meal Plan" showAdd onAddPress={handleAddMeal} />
+      <Header title="Meal Plan" showBack onBackPress={() => router.back()} showAdd onAddPress={handleAddMeal} />
       <View style={styles.calendarContainer}>
         <TouchableOpacity style={styles.arrowButton} onPress={goToPrevDay}>
           <ChevronLeft size={24} color={theme.colors.gray[600]} />

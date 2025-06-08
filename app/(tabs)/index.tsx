@@ -11,7 +11,7 @@ import RecommendationCard from '@/components/profile/RecommendationCard';
 import QuickStatsCard from '@/components/profile/QuickStatsCard';
 import OnboardingModal from '@/components/profile/OnboardingModal';
 import { theme } from '@/constants/theme';
-import { Settings, TrendingUp, Heart, Clock, ChefHat, Calendar, ShoppingBag } from 'lucide-react-native';
+import { Settings, TrendingUp, Heart, Clock, ChefHat, Calendar, ShoppingBag, Utensils } from 'lucide-react-native';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -113,6 +113,48 @@ export default function ProfileScreen() {
           recommendationsCount={recommendations.length}
         />
 
+        {/* Profile Features */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Profile Features</Text>
+          <View style={styles.featuresGrid}>
+            <TouchableOpacity 
+              style={styles.featureCard}
+              onPress={() => router.push('/profile/meal-plan')}
+            >
+              <Calendar size={24} color={theme.colors.primary} />
+              <Text style={styles.featureTitle}>Meal Planning</Text>
+              <Text style={styles.featureDescription}>Plan your weekly meals</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.featureCard}
+              onPress={() => router.push('/profile/saved-recipes')}
+            >
+              <Heart size={24} color={theme.colors.error} />
+              <Text style={styles.featureTitle}>Saved Recipes</Text>
+              <Text style={styles.featureDescription}>Your favorite recipes</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.featureCard}
+              onPress={() => router.push('/profile/dietary-preferences')}
+            >
+              <Utensils size={24} color={theme.colors.secondary} />
+              <Text style={styles.featureTitle}>Dietary Preferences</Text>
+              <Text style={styles.featureDescription}>Manage your diet settings</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.featureCard}
+              onPress={() => router.push('/profile/settings')}
+            >
+              <Settings size={24} color={theme.colors.gray[600]} />
+              <Text style={styles.featureTitle}>Settings</Text>
+              <Text style={styles.featureDescription}>App preferences</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Personalized Recommendations */}
         {profile?.onboardingCompleted && (
           <View style={styles.section}>
@@ -191,29 +233,20 @@ export default function ProfileScreen() {
         <View style={styles.quickActions}>
           <TouchableOpacity 
             style={styles.actionButton}
-            onPress={() => router.push('/meal-plan')}
-          >
-            <Calendar size={24} color="white" />
-            <Text style={styles.actionText}>Plan Meals</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: theme.colors.secondary }]}
             onPress={() => router.push('/shopping-list')}
           >
             <ShoppingBag size={24} color="white" />
             <Text style={styles.actionText}>Shopping List</Text>
           </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionButton, { backgroundColor: theme.colors.secondary }]}
+            onPress={() => router.push('/camera')}
+          >
+            <Calendar size={24} color="white" />
+            <Text style={styles.actionText}>Calorie Counter</Text>
+          </TouchableOpacity>
         </View>
-
-        {/* Settings Button */}
-        <TouchableOpacity 
-          style={styles.settingsButton}
-          onPress={() => router.push('/profile/settings')}
-        >
-          <Settings size={20} color={theme.colors.gray[600]} />
-          <Text style={styles.settingsText}>Settings & Privacy</Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* Onboarding Modal */}
@@ -276,6 +309,33 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     fontSize: 14,
     color: theme.colors.primary,
+  },
+  featuresGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  featureCard: {
+    backgroundColor: 'white',
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    alignItems: 'center',
+    width: '47%',
+    ...theme.shadows.sm,
+  },
+  featureTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+    color: theme.colors.text,
+    marginTop: theme.spacing.xs,
+    textAlign: 'center',
+  },
+  featureDescription: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: theme.colors.gray[600],
+    textAlign: 'center',
+    marginTop: 2,
   },
   loadingRecommendations: {
     padding: theme.spacing.xl,
@@ -363,17 +423,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'white',
     marginTop: theme.spacing.xs,
-  },
-  settingsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: theme.spacing.md,
-    gap: theme.spacing.xs,
-  },
-  settingsText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 14,
-    color: theme.colors.gray[600],
   },
 });

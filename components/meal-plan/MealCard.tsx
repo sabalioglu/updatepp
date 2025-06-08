@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Meal } from '@/types';
 import { theme } from '@/constants/theme';
-import { CreditCard as Edit, Trash2 } from 'lucide-react-native';
+import { Edit3, Trash2, Clock } from 'lucide-react-native';
 
 interface MealCardProps {
   meal: Meal;
@@ -31,6 +31,21 @@ export default function MealCard({ meal, onPress, onEdit, onDelete }: MealCardPr
     return meal.type.charAt(0).toUpperCase() + meal.type.slice(1);
   };
 
+  const getMealTypeIcon = () => {
+    switch (meal.type) {
+      case 'breakfast':
+        return '🌅';
+      case 'lunch':
+        return '☀️';
+      case 'dinner':
+        return '🌙';
+      case 'snack':
+        return '🍎';
+      default:
+        return '🍽️';
+    }
+  };
+
   return (
     <TouchableOpacity
       style={styles.container}
@@ -41,14 +56,17 @@ export default function MealCard({ meal, onPress, onEdit, onDelete }: MealCardPr
       
       <View style={styles.contentContainer}>
         <View style={styles.headerContainer}>
-          <Text style={styles.typeLabel}>{getMealTypeLabel()}</Text>
+          <View style={styles.mealTypeContainer}>
+            <Text style={styles.mealTypeIcon}>{getMealTypeIcon()}</Text>
+            <Text style={styles.typeLabel}>{getMealTypeLabel()}</Text>
+          </View>
           
           <View style={styles.actionsContainer}>
             <TouchableOpacity
               style={styles.actionButton}
               onPress={() => onEdit(meal)}
             >
-              <Edit size={16} color={theme.colors.gray[600]} />
+              <Edit3 size={16} color={theme.colors.gray[600]} />
             </TouchableOpacity>
             
             <TouchableOpacity
@@ -65,6 +83,13 @@ export default function MealCard({ meal, onPress, onEdit, onDelete }: MealCardPr
         {meal.notes && (
           <Text style={styles.notes}>{meal.notes}</Text>
         )}
+
+        {meal.recipeId && (
+          <View style={styles.recipeIndicator}>
+            <Clock size={12} color={theme.colors.primary} />
+            <Text style={styles.recipeText}>From saved recipe</Text>
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -80,7 +105,7 @@ const styles = StyleSheet.create({
     ...theme.shadows.sm,
   },
   typeIndicator: {
-    width: 8,
+    width: 6,
     height: '100%',
   },
   contentContainer: {
@@ -91,7 +116,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: theme.spacing.xs,
+  },
+  mealTypeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mealTypeIcon: {
+    fontSize: 16,
+    marginRight: theme.spacing.xs,
   },
   typeLabel: {
     fontFamily: 'Inter-Medium',
@@ -103,7 +136,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   actionButton: {
-    padding: 2,
+    padding: 4,
   },
   mealName: {
     fontFamily: 'Inter-SemiBold',
@@ -116,5 +149,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.gray[500],
     fontStyle: 'italic',
+    marginBottom: theme.spacing.xs,
+  },
+  recipeIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.gray[100],
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.sm,
+    alignSelf: 'flex-start',
+  },
+  recipeText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: theme.colors.primary,
+    marginLeft: 4,
   },
 });

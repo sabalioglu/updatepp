@@ -5,18 +5,7 @@ import { useUserProfile } from '@/hooks/useUserProfile';
 import ScreenContainer from '@/components/common/ScreenContainer';
 import Header from '@/components/common/Header';
 import { theme } from '@/constants/theme';
-import { 
-  User, 
-  Shield, 
-  Bell, 
-  Smartphone, 
-  HelpCircle, 
-  LogOut, 
-  ChevronRight,
-  Trash2,
-  Download,
-  Upload
-} from 'lucide-react-native';
+import { User, Shield, Bell, Smartphone, CircleHelp as HelpCircle, LogOut, ChevronRight, Trash2, Download, Upload } from 'lucide-react-native';
 
 export default function SettingsScreen() {
   const router = useRouter();

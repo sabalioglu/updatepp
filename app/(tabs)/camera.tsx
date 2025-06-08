@@ -6,8 +6,9 @@ import ScreenContainer from '@/components/common/ScreenContainer';
 import Header from '@/components/common/Header';
 import FoodAnalysisModal from '@/components/camera/FoodAnalysisModal';
 import CalorieCounterModal from '@/components/camera/CalorieCounterModal';
+import VoiceNotesModal from '@/components/camera/VoiceNotesModal';
 import { theme } from '@/constants/theme';
-import { Camera as CameraIcon, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator } from 'lucide-react-native';
+import { Camera as CameraIcon, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator, Mic } from 'lucide-react-native';
 import * as FileSystem from 'expo-file-system';
 
 type CaptureMode = 'photo' | 'multi-photo';
@@ -47,6 +48,14 @@ interface CalorieAnalysisResult {
   nutritionalTips: string[];
 }
 
+interface VoiceNote {
+  id: string;
+  uri: string;
+  duration: number;
+  timestamp: string;
+  transcription?: string;
+}
+
 export default function CameraScreen() {
   const router = useRouter();
   const [facing, setFacing] = useState<CameraType>('back');
@@ -54,9 +63,11 @@ export default function CameraScreen() {
   const [captureMode, setCaptureMode] = useState<CaptureMode>('photo');
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
   const [capturedMedia, setCapturedMedia] = useState<string[]>([]);
+  const [voiceNotes, setVoiceNotes] = useState<VoiceNote[]>([]);
   const [mediaType, setMediaType] = useState<'photo' | 'multi-photo' | null>(null);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [showCalorieModal, setShowCalorieModal] = useState(false);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<FoodAnalysisResult | null>(null);
   const [calorieResult, setCalorieResult] = useState<CalorieAnalysisResult | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -68,7 +79,7 @@ export default function CameraScreen() {
   if (!cameraPermission) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Calorie Counter\" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Voice Notes" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading permissions...</Text>
         </View>
@@ -80,12 +91,12 @@ export default function CameraScreen() {
   if (!cameraPermission.granted) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Voice Notes" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <CameraIcon size={64} color={theme.colors.gray[400]} />
           <Text style={styles.permissionTitle}>Camera Permission Required</Text>
           <Text style={styles.permissionText}>
-            We need access to your camera to take photos, analyze food items, and count calories.
+            We need access to your camera to take photos, analyze food items, and record voice notes about your pantry.
           </Text>
           <TouchableOpacity style={styles.permissionButton} onPress={requestCameraPermission}>
             <Text style={styles.permissionButtonText}>Grant Permission</Text>
@@ -142,6 +153,7 @@ export default function CameraScreen() {
 
   const retakeMedia = () => {
     setCapturedMedia([]);
+    setVoiceNotes([]);
     setMediaType(null);
     setAnalysisResult(null);
     setCalorieResult(null);
@@ -257,13 +269,25 @@ export default function CameraScreen() {
     }
   };
 
+  const openVoiceNotes = () => {
+    setShowVoiceModal(true);
+  };
+
+  const handleVoiceNoteAdded = (voiceNote: VoiceNote) => {
+    setVoiceNotes(prev => [...prev, voiceNote]);
+  };
+
+  const handleVoiceNoteDeleted = (voiceNoteId: string) => {
+    setVoiceNotes(prev => prev.filter(note => note.id !== voiceNoteId));
+  };
+
   const useMedia = () => {
     // In a real app, you would save this media or pass it to another screen
     // For now, we'll just show an alert and go back
     if (Platform.OS !== 'web') {
       Alert.alert(
         'Media Captured',
-        `Photo${mediaType === 'multi-photo' ? 's' : ''} saved successfully!`,
+        `Photo${mediaType === 'multi-photo' ? 's' : ''} and ${voiceNotes.length} voice note${voiceNotes.length !== 1 ? 's' : ''} saved successfully!`,
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } else {
@@ -291,11 +315,17 @@ export default function CameraScreen() {
                 <Text style={styles.photoCounterText}>{capturedMedia.length} photos</Text>
               </View>
             )}
+            {voiceNotes.length > 0 && (
+              <View style={styles.voiceCounter}>
+                <Mic size={16} color="white" />
+                <Text style={styles.voiceCounterText}>{voiceNotes.length}</Text>
+              </View>
+            )}
           </View>
           
           <View style={styles.previewActions}>
             <TouchableOpacity style={styles.previewActionButton} onPress={retakeMedia}>
-              <X size={20} color="white" />
+              <X size={18} color="white" />
               <Text style={styles.previewActionText}>Retake</Text>
             </TouchableOpacity>
             
@@ -303,24 +333,32 @@ export default function CameraScreen() {
               style={[styles.previewActionButton, styles.analyzeButton]} 
               onPress={analyzeFood}
             >
-              <Sparkles size={20} color="white" />
-              <Text style={styles.previewActionText}>Analyze Food</Text>
+              <Sparkles size={18} color="white" />
+              <Text style={styles.previewActionText}>Analyze</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={[styles.previewActionButton, styles.calorieButton]} 
               onPress={countCalories}
             >
-              <Calculator size={20} color="white" />
-              <Text style={styles.previewActionText}>Count Calories</Text>
+              <Calculator size={18} color="white" />
+              <Text style={styles.previewActionText}>Calories</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.previewActionButton, styles.voiceButton]} 
+              onPress={openVoiceNotes}
+            >
+              <Mic size={18} color="white" />
+              <Text style={styles.previewActionText}>Voice</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={[styles.previewActionButton, styles.useButton]} 
               onPress={useMedia}
             >
-              <Check size={20} color="white" />
-              <Text style={styles.previewActionText}>Use Photo{mediaType === 'multi-photo' ? 's' : ''}</Text>
+              <Check size={18} color="white" />
+              <Text style={styles.previewActionText}>Save</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -340,13 +378,21 @@ export default function CameraScreen() {
           loading={analysisLoading}
           error={analysisError}
         />
+
+        <VoiceNotesModal
+          visible={showVoiceModal}
+          onClose={() => setShowVoiceModal(false)}
+          voiceNotes={voiceNotes}
+          onVoiceNoteAdded={handleVoiceNoteAdded}
+          onVoiceNoteDeleted={handleVoiceNoteDeleted}
+        />
       </ScreenContainer>
     );
   }
 
   return (
     <ScreenContainer scrollable={false} style={styles.container}>
-      <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
+      <Header title="Camera & Voice Notes" showBack onBackPress={() => router.back()} />
       
       <View style={styles.cameraContainer}>
         <CameraView 
@@ -386,13 +432,14 @@ export default function CameraScreen() {
                   <X size={20} color="white" />
                 </TouchableOpacity>
                 
-                <Calculator size={32} color={theme.colors.primary} />
+                <Mic size={32} color={theme.colors.primary} />
                 <Text style={styles.infoTitle}>Smart Food Camera</Text>
                 <Text style={styles.infoText}>
                   • Single Photo: Quick food analysis{'\n'}
                   • Multi Photo: Multiple items at once{'\n'}
                   • AI Food Recognition: Identify ingredients{'\n'}
-                  • Calorie Counter: Nutritional analysis
+                  • Calorie Counter: Nutritional analysis{'\n'}
+                  • Voice Notes: Record audio reminders
                 </Text>
                 <Text style={styles.infoSubtext}>
                   Perfect for pantry management and meal tracking
@@ -420,10 +467,24 @@ export default function CameraScreen() {
               <View style={styles.captureButtonInner} />
             </TouchableOpacity>
             
-            <View style={styles.placeholder} />
+            <TouchableOpacity 
+              style={styles.voiceNoteButton} 
+              onPress={openVoiceNotes}
+            >
+              <Mic size={24} color="white" />
+              <Text style={styles.modeButtonText}>Voice</Text>
+            </TouchableOpacity>
           </View>
         </CameraView>
       </View>
+
+      <VoiceNotesModal
+        visible={showVoiceModal}
+        onClose={() => setShowVoiceModal(false)}
+        voiceNotes={voiceNotes}
+        onVoiceNoteAdded={handleVoiceNoteAdded}
+        onVoiceNoteDeleted={handleVoiceNoteDeleted}
+      />
     </ScreenContainer>
   );
 }
@@ -579,9 +640,12 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     backgroundColor: 'white',
   },
-  placeholder: {
-    width: 60,
-    height: 60,
+  voiceNoteButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.sm,
+    alignItems: 'center',
+    minWidth: 60,
   },
   previewContainer: {
     flex: 1,
@@ -609,6 +673,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'white',
   },
+  voiceCounter: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  voiceCounterText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: 'white',
+  },
   previewActions: {
     position: 'absolute',
     bottom: 50,
@@ -616,15 +697,15 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
   },
   previewActionButton: {
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     borderRadius: theme.borderRadius.md,
     paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
     alignItems: 'center',
-    minWidth: 70,
+    minWidth: 60,
   },
   analyzeButton: {
     backgroundColor: theme.colors.secondary,
@@ -632,12 +713,15 @@ const styles = StyleSheet.create({
   calorieButton: {
     backgroundColor: theme.colors.accent,
   },
+  voiceButton: {
+    backgroundColor: theme.colors.warning,
+  },
   useButton: {
     backgroundColor: theme.colors.primary,
   },
   previewActionText: {
     fontFamily: 'Inter-Medium',
-    fontSize: 11,
+    fontSize: 10,
     color: 'white',
     marginTop: theme.spacing.xs,
     textAlign: 'center',

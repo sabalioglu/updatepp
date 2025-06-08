@@ -3,32 +3,24 @@ import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal } from 'rea
 import { theme } from '@/constants/theme';
 import { X, Zap, TrendingUp, Target, Info } from 'lucide-react-native';
 
-interface FoodItem {
-  name: string;
-  quantity: string;
+interface NutritionAnalysis {
   calories: number;
   protein: number;
   carbs: number;
   fat: number;
   fiber: number;
-}
-
-interface CalorieAnalysisResult {
-  identifiedFoods: FoodItem[];
-  totalCalories: number;
-  totalProtein: number;
-  totalCarbs: number;
-  totalFat: number;
-  totalFiber: number;
-  mealType: string;
+  sugar: number;
+  sodium: number;
   healthScore: number;
-  nutritionalTips: string[];
+  mealType: string;
+  portionSize: string;
+  tips: string[];
 }
 
 interface CalorieCounterModalProps {
   visible: boolean;
   onClose: () => void;
-  analysisResult: CalorieAnalysisResult | null;
+  analysisResult: NutritionAnalysis | null;
   loading: boolean;
   error: string | null;
 }
@@ -46,10 +38,10 @@ export default function CalorieCounterModal({
     return theme.colors.error;
   };
 
-  const getMacroPercentage = (macro: number, totalCalories: number) => {
-    if (totalCalories === 0) return 0;
-    const caloriesFromMacro = macro * (macro === analysisResult?.totalFat ? 9 : 4); // Fat has 9 cal/g, others 4 cal/g
-    return Math.round((caloriesFromMacro / totalCalories) * 100);
+  const getMacroPercentage = (macro: number, calories: number) => {
+    // Protein and carbs: 4 calories per gram, Fat: 9 calories per gram
+    const macroCalories = macro * (macro === analysisResult?.fat ? 9 : 4);
+    return Math.round((macroCalories / calories) * 100);
   };
 
   return (
@@ -85,129 +77,122 @@ export default function CalorieCounterModal({
 
           {analysisResult && !loading && !error && (
             <>
-              {/* Total Calories Summary */}
-              <View style={styles.summaryCard}>
-                <View style={styles.calorieDisplay}>
-                  <Text style={styles.calorieNumber}>{analysisResult.totalCalories}</Text>
-                  <Text style={styles.calorieLabel}>calories</Text>
+              {/* Calorie Summary */}
+              <View style={styles.calorieCard}>
+                <View style={styles.calorieHeader}>
+                  <Zap size={32} color={theme.colors.primary} />
+                  <View style={styles.calorieInfo}>
+                    <Text style={styles.calorieCount}>{analysisResult.calories}</Text>
+                    <Text style={styles.calorieLabel}>calories</Text>
+                  </View>
                 </View>
                 
-                <View style={styles.mealTypeContainer}>
+                <View style={styles.mealInfo}>
                   <Text style={styles.mealType}>{analysisResult.mealType}</Text>
-                  <View style={styles.healthScoreContainer}>
-                    <Text style={styles.healthScoreLabel}>Health Score</Text>
+                  <Text style={styles.portionSize}>{analysisResult.portionSize}</Text>
+                </View>
+              </View>
+
+              {/* Health Score */}
+              <View style={styles.healthScoreCard}>
+                <View style={styles.healthScoreHeader}>
+                  <Target size={24} color={getHealthScoreColor(analysisResult.healthScore)} />
+                  <Text style={styles.healthScoreTitle}>Health Score</Text>
+                </View>
+                
+                <View style={styles.healthScoreContainer}>
+                  <View style={styles.healthScoreCircle}>
                     <Text style={[
-                      styles.healthScore, 
+                      styles.healthScoreValue,
                       { color: getHealthScoreColor(analysisResult.healthScore) }
                     ]}>
-                      {analysisResult.healthScore}/100
+                      {analysisResult.healthScore}
                     </Text>
+                    <Text style={styles.healthScoreMax}>/100</Text>
                   </View>
-                </View>
+                  
+                  <View style={styles.healthScoreBar}>
+                    <View 
+                      style={[
+                        styles.healthScoreFill,
+                        { 
+                          width: `${analysisResult.healthScore}%`,
+                          backgroundColor: getHealthScoreColor(analysisResult.healthScore)
+                        }
+                      ]} 
+                    />
+                  </View>
+                </div>
               </View>
 
-              {/* Macronutrients Breakdown */}
-              <View style={styles.section}>
+              {/* Macronutrients */}
+              <View style={styles.macroCard}>
                 <Text style={styles.sectionTitle}>Macronutrients</Text>
+                
                 <View style={styles.macroGrid}>
-                  <View style={styles.macroCard}>
-                    <Text style={styles.macroValue}>{analysisResult.totalProtein}g</Text>
+                  <View style={styles.macroItem}>
+                    <Text style={styles.macroValue}>{analysisResult.protein}g</Text>
                     <Text style={styles.macroLabel}>Protein</Text>
                     <Text style={styles.macroPercentage}>
-                      {getMacroPercentage(analysisResult.totalProtein, analysisResult.totalCalories)}%
+                      {getMacroPercentage(analysisResult.protein, analysisResult.calories)}%
                     </Text>
                   </View>
                   
-                  <View style={styles.macroCard}>
-                    <Text style={styles.macroValue}>{analysisResult.totalCarbs}g</Text>
+                  <View style={styles.macroItem}>
+                    <Text style={styles.macroValue}>{analysisResult.carbs}g</Text>
                     <Text style={styles.macroLabel}>Carbs</Text>
                     <Text style={styles.macroPercentage}>
-                      {getMacroPercentage(analysisResult.totalCarbs, analysisResult.totalCalories)}%
+                      {getMacroPercentage(analysisResult.carbs, analysisResult.calories)}%
                     </Text>
                   </View>
                   
-                  <View style={styles.macroCard}>
-                    <Text style={styles.macroValue}>{analysisResult.totalFat}g</Text>
+                  <View style={styles.macroItem}>
+                    <Text style={styles.macroValue}>{analysisResult.fat}g</Text>
                     <Text style={styles.macroLabel}>Fat</Text>
                     <Text style={styles.macroPercentage}>
-                      {getMacroPercentage(analysisResult.totalFat, analysisResult.totalCalories)}%
+                      {getMacroPercentage(analysisResult.fat, analysisResult.calories)}%
                     </Text>
-                  </View>
-                  
-                  <View style={styles.macroCard}>
-                    <Text style={styles.macroValue}>{analysisResult.totalFiber}g</Text>
-                    <Text style={styles.macroLabel}>Fiber</Text>
-                    <Text style={styles.macroPercentage}>-</Text>
                   </View>
                 </View>
               </View>
 
-              {/* Food Items Breakdown */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Food Items</Text>
-                {analysisResult.identifiedFoods.map((food, index) => (
-                  <View key={index} style={styles.foodItemCard}>
-                    <View style={styles.foodHeader}>
-                      <Text style={styles.foodName}>{food.name}</Text>
-                      <Text style={styles.foodQuantity}>{food.quantity}</Text>
-                    </View>
-                    
-                    <View style={styles.foodNutrients}>
-                      <View style={styles.nutrientItem}>
-                        <Text style={styles.nutrientValue}>{food.calories}</Text>
-                        <Text style={styles.nutrientLabel}>cal</Text>
-                      </View>
-                      <View style={styles.nutrientItem}>
-                        <Text style={styles.nutrientValue}>{food.protein}g</Text>
-                        <Text style={styles.nutrientLabel}>protein</Text>
-                      </View>
-                      <View style={styles.nutrientItem}>
-                        <Text style={styles.nutrientValue}>{food.carbs}g</Text>
-                        <Text style={styles.nutrientLabel}>carbs</Text>
-                      </View>
-                      <View style={styles.nutrientItem}>
-                        <Text style={styles.nutrientValue}>{food.fat}g</Text>
-                        <Text style={styles.nutrientLabel}>fat</Text>
-                      </View>
-                    </View>
+              {/* Additional Nutrients */}
+              <View style={styles.nutrientCard}>
+                <Text style={styles.sectionTitle}>Additional Nutrients</Text>
+                
+                <View style={styles.nutrientList}>
+                  <View style={styles.nutrientRow}>
+                    <Text style={styles.nutrientLabel}>Fiber</Text>
+                    <Text style={styles.nutrientValue}>{analysisResult.fiber}g</Text>
                   </View>
-                ))}
+                  
+                  <View style={styles.nutrientRow}>
+                    <Text style={styles.nutrientLabel}>Sugar</Text>
+                    <Text style={styles.nutrientValue}>{analysisResult.sugar}g</Text>
+                  </View>
+                  
+                  <View style={styles.nutrientRow}>
+                    <Text style={styles.nutrientLabel}>Sodium</Text>
+                    <Text style={styles.nutrientValue}>{analysisResult.sodium}mg</Text>
+                  </View>
+                </View>
               </View>
 
-              {/* Nutritional Tips */}
-              {analysisResult.nutritionalTips.length > 0 && (
-                <View style={styles.section}>
-                  <View style={styles.sectionHeaderWithIcon}>
-                    <Target size={20} color={theme.colors.primary} />
+              {/* Health Tips */}
+              {analysisResult.tips.length > 0 && (
+                <View style={styles.tipsCard}>
+                  <View style={styles.tipsHeader}>
+                    <Info size={20} color={theme.colors.primary} />
                     <Text style={styles.sectionTitle}>Nutritional Tips</Text>
                   </View>
-                  {analysisResult.nutritionalTips.map((tip, index) => (
+                  
+                  {analysisResult.tips.map((tip, index) => (
                     <View key={index} style={styles.tipItem}>
-                      <Info size={16} color={theme.colors.primary} />
-                      <Text style={styles.tipText}>{tip}</Text>
+                      <Text style={styles.tipText}>• {tip}</Text>
                     </View>
                   ))}
                 </View>
               )}
-
-              {/* Daily Progress Indicator */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Daily Progress</Text>
-                <View style={styles.progressCard}>
-                  <Text style={styles.progressText}>
-                    This meal represents approximately {Math.round((analysisResult.totalCalories / 2000) * 100)}% 
-                    of a 2000-calorie daily intake
-                  </Text>
-                  <View style={styles.progressBar}>
-                    <View 
-                      style={[
-                        styles.progressFill, 
-                        { width: `${Math.min((analysisResult.totalCalories / 2000) * 100, 100)}%` }
-                      ]} 
-                    />
-                  </View>
-                </View>
-              </View>
             </>
           )}
         </ScrollView>
@@ -276,79 +261,112 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.error,
   },
-  summaryCard: {
+  calorieCard: {
     backgroundColor: 'white',
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.lg,
     marginBottom: theme.spacing.lg,
-    alignItems: 'center',
     ...theme.shadows.md,
   },
-  calorieDisplay: {
+  calorieHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: theme.spacing.md,
   },
-  calorieNumber: {
+  calorieInfo: {
+    marginLeft: theme.spacing.md,
+    alignItems: 'center',
+  },
+  calorieCount: {
     fontFamily: 'Poppins-Bold',
-    fontSize: 48,
+    fontSize: 36,
     color: theme.colors.primary,
   },
   calorieLabel: {
     fontFamily: 'Inter-Medium',
-    fontSize: 16,
+    fontSize: 14,
     color: theme.colors.gray[600],
   },
-  mealTypeContainer: {
+  mealInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
   },
   mealType: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 16,
     color: theme.colors.text,
   },
-  healthScoreContainer: {
-    alignItems: 'flex-end',
-  },
-  healthScoreLabel: {
+  portionSize: {
     fontFamily: 'Inter-Regular',
-    fontSize: 12,
+    fontSize: 14,
     color: theme.colors.gray[600],
   },
-  healthScore: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 16,
-  },
-  section: {
+  healthScoreCard: {
+    backgroundColor: 'white',
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
     marginBottom: theme.spacing.lg,
+    ...theme.shadows.sm,
   },
-  sectionTitle: {
-    fontFamily: 'Poppins-SemiBold',
-    fontSize: 18,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-  },
-  sectionHeaderWithIcon: {
+  healthScoreHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: theme.spacing.sm,
-    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.md,
   },
-  macroGrid: {
+  healthScoreTitle: {
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 16,
+    color: theme.colors.text,
+    marginLeft: theme.spacing.xs,
+  },
+  healthScoreContainer: {
+    alignItems: 'center',
+  },
+  healthScoreCircle: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
+    alignItems: 'baseline',
+    marginBottom: theme.spacing.sm,
+  },
+  healthScoreValue: {
+    fontFamily: 'Poppins-Bold',
+    fontSize: 32,
+  },
+  healthScoreMax: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 16,
+    color: theme.colors.gray[600],
+  },
+  healthScoreBar: {
+    width: '100%',
+    height: 8,
+    backgroundColor: theme.colors.gray[200],
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  healthScoreFill: {
+    height: '100%',
   },
   macroCard: {
     backgroundColor: 'white',
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+    ...theme.shadows.sm,
+  },
+  sectionTitle: {
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 16,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+  },
+  macroGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  macroItem: {
     alignItems: 'center',
     flex: 1,
-    minWidth: '22%',
-    ...theme.shadows.sm,
   },
   macroValue: {
     fontFamily: 'Poppins-SemiBold',
@@ -356,92 +374,62 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   macroLabel: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'Inter-Regular',
     fontSize: 12,
     color: theme.colors.gray[600],
     marginTop: 2,
   },
   macroPercentage: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'Inter-Medium',
     fontSize: 10,
-    color: theme.colors.gray[500],
+    color: theme.colors.primary,
     marginTop: 2,
   },
-  foodItemCard: {
+  nutrientCard: {
     backgroundColor: 'white',
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
     ...theme.shadows.sm,
   },
-  foodHeader: {
+  nutrientList: {
+    gap: theme.spacing.sm,
+  },
+  nutrientRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
-  foodName: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 16,
-    color: theme.colors.text,
-  },
-  foodQuantity: {
+  nutrientLabel: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
-    color: theme.colors.gray[600],
-  },
-  foodNutrients: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  nutrientItem: {
-    alignItems: 'center',
+    color: theme.colors.text,
   },
   nutrientValue: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 14,
-    color: theme.colors.text,
+    color: theme.colors.gray[700],
   },
-  nutrientLabel: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 11,
-    color: theme.colors.gray[600],
-    marginTop: 2,
+  tipsCard: {
+    backgroundColor: 'white',
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+    ...theme.shadows.sm,
+  },
+  tipsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
   },
   tipItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: theme.spacing.sm,
-    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
   },
   tipText: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
     color: theme.colors.text,
     lineHeight: 20,
-    flex: 1,
-  },
-  progressCard: {
-    backgroundColor: 'white',
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    ...theme.shadows.sm,
-  },
-  progressText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-    textAlign: 'center',
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: theme.colors.gray[200],
-    borderRadius: theme.borderRadius.sm,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
   },
 });

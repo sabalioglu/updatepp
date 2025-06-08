@@ -1,6 +1,6 @@
 [build]
   command = "npm run build:web"
-  publish = "dist/client"
+  publish = "dist"
 
 [[redirects]]
   from = "/api/*"

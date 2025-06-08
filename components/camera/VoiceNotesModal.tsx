@@ -23,7 +23,7 @@ interface VoiceNotesModalProps {
 }
 
 interface PantryAnalysisResult {
-  pantryItems: Array<{
+  pantryItems?: Array<{
     name: string;
     quantity: number;
     unit: string;
@@ -245,7 +245,10 @@ export default function VoiceNotesModal({
   };
 
   const addItemsToPantry = async () => {
-    if (!analysisResult) return;
+    if (!analysisResult?.pantryItems || !Array.isArray(analysisResult.pantryItems)) {
+      Alert.alert('Error', 'No pantry items to add.');
+      return;
+    }
 
     try {
       const today = new Date();
@@ -490,7 +493,7 @@ export default function VoiceNotesModal({
                 <ScrollView style={styles.analysisContent}>
                   <Text style={styles.analysisSummary}>{analysisResult.summary}</Text>
 
-                  {analysisResult.pantryItems.length > 0 && (
+                  {Array.isArray(analysisResult.pantryItems) && analysisResult.pantryItems.length > 0 && (
                     <View style={styles.itemsSection}>
                       <Text style={styles.itemsSectionTitle}>Items to Add:</Text>
                       {analysisResult.pantryItems.map((item, index) => (
@@ -507,7 +510,7 @@ export default function VoiceNotesModal({
                     </View>
                   )}
 
-                  {analysisResult.suggestions.length > 0 && (
+                  {Array.isArray(analysisResult.suggestions) && analysisResult.suggestions.length > 0 && (
                     <View style={styles.suggestionsSection}>
                       <Text style={styles.suggestionsSectionTitle}>Storage Tips:</Text>
                       {analysisResult.suggestions.map((suggestion, index) => (
@@ -518,10 +521,12 @@ export default function VoiceNotesModal({
                     </View>
                   )}
 
-                  <TouchableOpacity style={styles.addToPantryButton} onPress={addItemsToPantry}>
-                    <Plus size={20} color="white" />
-                    <Text style={styles.addToPantryText}>Add to Pantry</Text>
-                  </TouchableOpacity>
+                  {Array.isArray(analysisResult.pantryItems) && analysisResult.pantryItems.length > 0 && (
+                    <TouchableOpacity style={styles.addToPantryButton} onPress={addItemsToPantry}>
+                      <Plus size={20} color="white" />
+                      <Text style={styles.addToPantryText}>Add to Pantry</Text>
+                    </TouchableOpacity>
+                  )}
                 </ScrollView>
               )}
             </View>

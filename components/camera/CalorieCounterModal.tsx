@@ -122,7 +122,7 @@ export default function CalorieCounterModal({
                       ]} 
                     />
                   </View>
-                </div>
+                </View>
               </View>
 
               {/* Macronutrients */}

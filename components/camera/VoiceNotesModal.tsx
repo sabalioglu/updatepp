@@ -53,7 +53,8 @@ export default function VoiceNotesModal({
   const [showAnalysisResult, setShowAnalysisResult] = useState(false);
   
   const { addItem } = usePantryItems();
-  const recordingRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const soundRef = useRef<any>(null);
   const durationInterval = useRef<NodeJS.Timeout | null>(null);
 
@@ -66,6 +67,9 @@ export default function VoiceNotesModal({
       if (soundRef.current) {
         soundRef.current.unloadAsync();
       }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
     };
   }, []);
 
@@ -76,11 +80,26 @@ export default function VoiceNotesModal({
         stream.getTracks().forEach(track => track.stop());
         setRecordingPermission(true);
       } catch (error) {
+        console.error('Permission check error:', error);
         setRecordingPermission(false);
       }
     } else {
       setRecordingPermission(true);
     }
+  };
+
+  const convertBlobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        // Remove the data URL prefix (e.g., "data:audio/wav;base64,")
+        const base64Data = base64String.split(',')[1];
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   };
 
   const startRecording = async () => {
@@ -92,70 +111,70 @@ export default function VoiceNotesModal({
     try {
       setIsRecording(true);
       setRecordingDuration(0);
+      audioChunksRef.current = [];
       
       durationInterval.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
       }, 1000);
 
       if (Platform.OS === 'web') {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
-        const chunks: BlobPart[] = [];
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true
+          }
+        });
+        
+        const mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'audio/webm;codecs=opus'
+        });
+        
+        mediaRecorderRef.current = mediaRecorder;
 
         mediaRecorder.ondataavailable = (event) => {
-          chunks.push(event.data);
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
         };
 
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(chunks, { type: 'audio/wav' });
-          const url = URL.createObjectURL(blob);
-          
-          // Create a mock transcription for demo purposes
-          const mockTranscriptions = [
-            "I just bought 2 pounds of chicken breast, 1 gallon of milk, and 6 bananas from the grocery store",
-            "Added 3 tomatoes, 1 bag of spinach, and 2 avocados to the pantry today",
-            "Got fresh bread from the bakery, 12 eggs, and some cheddar cheese",
-            "Picked up 1 pound of ground beef, pasta, and marinara sauce for dinner",
-            "Bought 2 bell peppers, 1 onion, and garlic for cooking this week"
-          ];
-          
-          const voiceNote: VoiceNote = {
-            id: Date.now().toString(),
-            uri: url,
-            duration: recordingDuration,
-            timestamp: new Date().toISOString(),
-            transcription: mockTranscriptions[Math.floor(Math.random() * mockTranscriptions.length)],
-            processed: false,
-          };
-          
-          onVoiceNoteAdded(voiceNote);
-          stream.getTracks().forEach(track => track.stop());
+        mediaRecorder.onstop = async () => {
+          try {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+            const audioBase64 = await convertBlobToBase64(audioBlob);
+            const url = URL.createObjectURL(audioBlob);
+            
+            console.log('Audio recorded, size:', audioBlob.size, 'bytes');
+            console.log('Base64 length:', audioBase64.length);
+            
+            const voiceNote: VoiceNote = {
+              id: Date.now().toString(),
+              uri: url,
+              duration: recordingDuration,
+              timestamp: new Date().toISOString(),
+              processed: false,
+            };
+            
+            // Immediately transcribe the audio
+            await transcribeAudio(voiceNote, audioBase64);
+            
+            onVoiceNoteAdded(voiceNote);
+            stream.getTracks().forEach(track => track.stop());
+          } catch (error) {
+            console.error('Error processing recorded audio:', error);
+            Alert.alert('Error', 'Failed to process recorded audio.');
+          }
         };
 
-        recordingRef.current = mediaRecorder;
-        mediaRecorder.start();
+        mediaRecorder.start(1000); // Collect data every second
       } else {
-        // Mock voice note for native demo
-        const mockTranscriptions = [
-          "I just bought 2 pounds of chicken breast, 1 gallon of milk, and 6 bananas from the grocery store",
-          "Added 3 tomatoes, 1 bag of spinach, and 2 avocados to the pantry today",
-          "Got fresh bread from the bakery, 12 eggs, and some cheddar cheese",
-          "Picked up 1 pound of ground beef, pasta, and marinara sauce for dinner",
-          "Bought 2 bell peppers, 1 onion, and garlic for cooking this week"
-        ];
-        
-        setTimeout(() => {
-          const voiceNote: VoiceNote = {
-            id: Date.now().toString(),
-            uri: 'mock-recording-uri',
-            duration: recordingDuration,
-            timestamp: new Date().toISOString(),
-            transcription: mockTranscriptions[Math.floor(Math.random() * mockTranscriptions.length)],
-            processed: false,
-          };
-          
-          onVoiceNoteAdded(voiceNote);
-        }, 100);
+        // For native platforms, we'll simulate recording for now
+        Alert.alert('Recording', 'Voice recording is not yet implemented for native platforms.');
+        setIsRecording(false);
+        if (durationInterval.current) {
+          clearInterval(durationInterval.current);
+        }
       }
     } catch (error) {
       console.error('Error starting recording:', error);
@@ -175,12 +194,46 @@ export default function VoiceNotesModal({
         clearInterval(durationInterval.current);
       }
 
-      if (Platform.OS === 'web' && recordingRef.current) {
-        recordingRef.current.stop();
+      if (Platform.OS === 'web' && mediaRecorderRef.current) {
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
       }
     } catch (error) {
       console.error('Error stopping recording:', error);
       Alert.alert('Error', 'Failed to stop recording.');
+    }
+  };
+
+  const transcribeAudio = async (voiceNote: VoiceNote, audioBase64: string) => {
+    try {
+      console.log('Sending audio for transcription, base64 length:', audioBase64.length);
+      
+      const response = await fetch('/api/voice-to-pantry', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          audioBase64: audioBase64,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Transcription API error:', errorData);
+        throw new Error(errorData.error || 'Failed to transcribe audio');
+      }
+
+      const result = await response.json();
+      console.log('Transcription result:', result);
+      
+      // Update the voice note with transcription
+      voiceNote.transcription = result.transcription;
+      
+    } catch (error) {
+      console.error('Transcription error:', error);
+      voiceNote.transcription = 'Failed to transcribe audio';
     }
   };
 
@@ -220,6 +273,8 @@ export default function VoiceNotesModal({
     setAnalysisResult(null);
 
     try {
+      console.log('Processing transcription:', voiceNote.transcription);
+      
       const response = await fetch('/api/voice-to-pantry', {
         method: 'POST',
         headers: {
@@ -236,6 +291,7 @@ export default function VoiceNotesModal({
       }
 
       const result = await response.json();
+      console.log('Processing result:', result);
       setAnalysisResult(result);
       setShowAnalysisResult(true);
     } catch (error) {

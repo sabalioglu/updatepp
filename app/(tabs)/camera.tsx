@@ -190,8 +190,8 @@ export default function CameraScreen() {
       }, 1000);
       setRecordingInterval(interval);
 
-      // Wait for camera to be ready before starting recording
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait for camera to be ready before starting recording - increased delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       console.log('Camera ready, starting recording...');
       setIsRecordingReady(true);
@@ -220,7 +220,7 @@ export default function CameraScreen() {
       
       if (error instanceof Error) {
         if (error.message.includes('Recording was stopped before any data could be produced')) {
-          errorMessage = 'Recording stopped too quickly. Please hold the record button longer.';
+          errorMessage = 'Recording stopped too quickly. Please hold the record button for at least 2 seconds.';
         } else if (error.message.includes('permissions')) {
           errorMessage = 'Camera or microphone permission denied. Please check your settings.';
         } else if (error.message.includes('busy')) {
@@ -244,14 +244,14 @@ export default function CameraScreen() {
   };
 
   const stopRecording = async () => {
-    if (!cameraRef.current || !isRecording || !recordingStartTime) {
+    if (!cameraRef.current || !isRecording || !isRecordingReady || !recordingStartTime) {
       console.log('Cannot stop recording: camera not ready or not recording');
       return;
     }
 
     try {
       const recordingDuration = Date.now() - recordingStartTime;
-      const minimumRecordingTime = 1000; // 1 second minimum recording time
+      const minimumRecordingTime = 2000; // 2 second minimum recording time
       
       console.log(`Recording duration: ${recordingDuration}ms`);
       
@@ -565,7 +565,7 @@ export default function CameraScreen() {
                   • Calorie Counter: Nutritional analysis
                 </Text>
                 <Text style={styles.infoSubtext}>
-                  For video recording, hold the button for at least 1 second
+                  For video recording, hold the button for at least 2 seconds
                 </Text>
               </View>
             </View>

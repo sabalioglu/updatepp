@@ -1,18 +1,18 @@
 /*
-  # Create meal plans table
+  # Create meal planning tables
 
   1. New Tables
     - `meal_plans`
       - `id` (uuid, primary key)
-      - `user_id` (uuid, references auth.users)
+      - `user_id` (uuid, foreign key to auth.users)
       - `date` (date)
       - `created_at` (timestamp)
       - `updated_at` (timestamp)
     - `meals`
       - `id` (uuid, primary key)
-      - `meal_plan_id` (uuid, references meal_plans)
-      - `type` (text) - breakfast, lunch, dinner, snack
-      - `recipe_id` (uuid, nullable, references recipes)
+      - `meal_plan_id` (uuid, foreign key to meal_plans)
+      - `type` (text, check constraint for meal types)
+      - `recipe_id` (uuid, foreign key to recipes, nullable)
       - `recipe_name` (text)
       - `notes` (text)
       - `created_at` (timestamp)
@@ -20,7 +20,11 @@
 
   2. Security
     - Enable RLS on both tables
-    - Add policies for authenticated users to manage their own meal plans
+    - Add policies for authenticated users to manage their own data
+
+  3. Performance
+    - Add indexes for common queries
+    - Add triggers for automatic updated_at timestamps
 */
 
 -- Create meal_plans table
@@ -135,15 +139,6 @@ CREATE POLICY "Users can delete own meals"
 CREATE INDEX IF NOT EXISTS idx_meal_plans_user_date ON meal_plans(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_meals_meal_plan_id ON meals(meal_plan_id);
 CREATE INDEX IF NOT EXISTS idx_meals_type ON meals(type);
-
--- Create function to automatically update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$ language 'plpgsql';
 
 -- Create triggers for updated_at
 CREATE TRIGGER update_meal_plans_updated_at 

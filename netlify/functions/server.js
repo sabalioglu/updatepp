@@ -1,183 +1,216 @@
 const path = require('path');
 const fs = require('fs');
 
-// Import the Expo Router server handler
-let serverHandler;
-
-try {
-  // Fix the paths to correctly point to the dist directory
-  // __dirname is netlify/functions, so we need to go up two levels to reach the project root
-  const projectRoot = path.resolve(__dirname, '..', '..');
-  const serverPath = path.join(projectRoot, 'dist', 'server', '_expo', 'functions');
-  
-  // Check if the functions directory exists and load the handler
-  if (fs.existsSync(serverPath)) {
-    // Load the routes configuration
-    const routesPath = path.join(projectRoot, 'dist', 'server', '_expo', 'routes.json');
-    let routes = {};
-    
-    if (fs.existsSync(routesPath)) {
-      routes = JSON.parse(fs.readFileSync(routesPath, 'utf8'));
-    }
-    
-    // Create a simple handler that serves static files and API routes
-    serverHandler = {
-      handler: async (req, res) => {
-        const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-        const pathname = url.pathname;
-        
-        // Handle API routes
-        if (pathname.startsWith('/api/')) {
-          const apiPath = pathname.replace('/api/', '');
-          const functionPath = path.join(serverPath, 'api', `${apiPath}+api.js`);
-          
-          if (fs.existsSync(functionPath)) {
-            try {
-              const apiHandler = require(functionPath);
-              const method = req.method.toUpperCase();
-              
-              if (apiHandler[method]) {
-                // Create a proper Request object for the API handler
-                const request = new Request(url.toString(), {
-                  method: req.method,
-                  headers: req.headers,
-                  body: req.body ? JSON.stringify(req.body) : undefined,
-                });
-                
-                const response = await apiHandler[method](request);
-                const responseText = await response.text();
-                
-                res.writeHead(response.status, {
-                  'Content-Type': response.headers.get('Content-Type') || 'application/json',
-                  ...Object.fromEntries(response.headers.entries()),
-                });
-                res.end(responseText);
-                return;
-              }
-            } catch (error) {
-              console.error('Error handling API route:', error);
-              res.writeHead(500, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Internal server error' }));
-              return;
-            }
-          }
-        }
-        
-        // Handle static files and pages - use corrected paths
-        const clientPath = path.join(projectRoot, 'dist', 'client');
-        const serverStaticPath = path.join(projectRoot, 'dist', 'server');
-        
-        // Try to serve from client directory first
-        let filePath = path.join(clientPath, pathname === '/' ? 'index.html' : pathname);
-        
-        // If not found in client, try server directory for HTML pages
-        if (!fs.existsSync(filePath)) {
-          if (pathname === '/' || pathname === '') {
-            filePath = path.join(serverStaticPath, '(tabs)', 'index.html');
-          } else if (pathname.startsWith('/(tabs)/')) {
-            const pageName = pathname.replace('/(tabs)/', '');
-            filePath = path.join(serverStaticPath, '(tabs)', `${pageName}.html`);
-          } else {
-            // Try direct path in server directory
-            filePath = path.join(serverStaticPath, `${pathname.slice(1)}.html`);
-          }
-        }
-        
-        // If still not found, serve index.html for SPA routing
-        if (!fs.existsSync(filePath)) {
-          filePath = path.join(serverStaticPath, '(tabs)', 'index.html');
-        }
-        
-        if (fs.existsSync(filePath)) {
-          const content = fs.readFileSync(filePath, 'utf8');
-          const ext = path.extname(filePath);
-          
-          let contentType = 'text/html';
-          if (ext === '.js') contentType = 'application/javascript';
-          else if (ext === '.css') contentType = 'text/css';
-          else if (ext === '.json') contentType = 'application/json';
-          
-          res.writeHead(200, { 'Content-Type': contentType });
-          res.end(content);
-        } else {
-          res.writeHead(404, { 'Content-Type': 'text/html' });
-          res.end('<h1>404 - Page Not Found</h1>');
-        }
-      }
-    };
-  } else {
-    console.error('Server functions directory not found:', serverPath);
-    console.log('Available directories:', fs.readdirSync(path.join(projectRoot, 'dist')));
-  }
-} catch (error) {
-  console.error('Error setting up server handler:', error);
-}
-
 exports.handler = async (event, context) => {
   try {
-    if (!serverHandler) {
+    const { httpMethod, path: requestPath, queryStringParameters, headers, body } = event;
+    
+    // Handle API routes
+    if (requestPath.startsWith('/api/')) {
+      const apiPath = requestPath.replace('/api/', '');
+      
+      // Handle food recognition API
+      if (apiPath === 'food-recognition' && httpMethod === 'POST') {
+        try {
+          const requestBody = JSON.parse(body || '{}');
+          const { imageBase64 } = requestBody;
+          
+          if (!imageBase64) {
+            return {
+              statusCode: 400,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+              },
+              body: JSON.stringify({ error: 'No image data provided' }),
+            };
+          }
+
+          const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+          
+          if (!apiKey) {
+            return {
+              statusCode: 500,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+              },
+              body: JSON.stringify({ error: 'Gemini API key not configured' }),
+            };
+          }
+
+          const systemPrompt = `You are a food recognition and recipe suggestion AI for a pantry management app called Pantry Pal. Your ONLY purpose is to:
+
+1. Identify food items in images
+2. Suggest recipes based on identified ingredients
+3. Provide pantry management advice
+
+STRICT RULES:
+- ONLY discuss food, cooking, recipes, and pantry management
+- REFUSE to answer any questions not related to food/cooking
+- If asked about anything else, respond: "I can only help with food recognition and recipe suggestions for Pantry Pal."
+- Focus on practical, actionable advice for reducing food waste
+- Suggest recipes that use common pantry staples
+
+When analyzing food images:
+1. List all identifiable food items
+2. Assess freshness/quality if visible
+3. Suggest 2-3 recipes using those ingredients
+4. Provide storage tips to extend shelf life
+5. Recommend complementary ingredients from a typical pantry
+
+Format your response as JSON with this structure:
+{
+  "identifiedFoods": ["item1", "item2", "item3"],
+  "freshnessAssessment": "brief assessment of visible food quality",
+  "suggestedRecipes": [
+    {
+      "name": "Recipe Name",
+      "description": "Brief description",
+      "mainIngredients": ["ingredient1", "ingredient2"],
+      "cookTime": "estimated time",
+      "difficulty": "easy/medium/hard"
+    }
+  ],
+  "storageTips": ["tip1", "tip2"],
+  "complementaryIngredients": ["ingredient1", "ingredient2"]
+}
+
+Please analyze this food image and provide recipe suggestions.`;
+
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: systemPrompt
+                    },
+                    {
+                      inline_data: {
+                        mime_type: "image/jpeg",
+                        data: imageBase64
+                      }
+                    }
+                  ]
+                }
+              ],
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 1000,
+              }
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.text();
+            console.error('Gemini API error:', errorData);
+            return {
+              statusCode: response.status,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+              },
+              body: JSON.stringify({ error: 'Failed to analyze image' }),
+            };
+          }
+
+          const data = await response.json();
+          const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+          if (!aiResponse) {
+            return {
+              statusCode: 500,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+              },
+              body: JSON.stringify({ error: 'No response from AI' }),
+            };
+          }
+
+          // Try to parse the JSON response from the AI
+          let parsedResponse;
+          try {
+            const cleanedResponse = aiResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            parsedResponse = JSON.parse(cleanedResponse);
+          } catch (parseError) {
+            parsedResponse = {
+              identifiedFoods: ['Unable to identify'],
+              freshnessAssessment: 'Could not assess',
+              suggestedRecipes: [{
+                name: 'Analysis Error',
+                description: 'Unable to analyze the image properly',
+                mainIngredients: [],
+                cookTime: 'N/A',
+                difficulty: 'N/A'
+              }],
+              storageTips: ['Please try taking another photo'],
+              complementaryIngredients: []
+            };
+          }
+
+          return {
+            statusCode: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'POST, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type',
+            },
+            body: JSON.stringify(parsedResponse),
+          };
+
+        } catch (error) {
+          console.error('Food recognition API error:', error);
+          return {
+            statusCode: 500,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            },
+            body: JSON.stringify({ error: 'Internal server error' }),
+          };
+        }
+      }
+
+      // Handle OPTIONS requests for CORS
+      if (httpMethod === 'OPTIONS') {
+        return {
+          statusCode: 200,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          },
+          body: '',
+        };
+      }
+
+      // API route not found
       return {
-        statusCode: 500,
+        statusCode: 404,
         headers: {
-          'Content-Type': 'text/html',
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
         },
-        body: `
-          <html>
-            <body>
-              <h1>Server Error</h1>
-              <p>Could not initialize the server handler. Please check the build output.</p>
-            </body>
-          </html>
-        `,
+        body: JSON.stringify({ error: 'API route not found' }),
       };
     }
 
-    // Create a mock request object
-    const mockRequest = {
-      method: event.httpMethod,
-      url: event.path + (event.queryStringParameters ? '?' + new URLSearchParams(event.queryStringParameters).toString() : ''),
-      headers: event.headers || {},
-      body: event.body ? JSON.parse(event.body) : undefined,
-      query: event.queryStringParameters || {},
-    };
-
-    // Create a mock response object
-    let responseBody = '';
-    let statusCode = 200;
-    let responseHeaders = {
-      'Content-Type': 'text/html',
-    };
-
-    const mockResponse = {
-      statusCode: 200,
-      headers: responseHeaders,
-      write: (chunk) => {
-        responseBody += chunk;
-      },
-      end: (chunk) => {
-        if (chunk) responseBody += chunk;
-      },
-      setHeader: (name, value) => {
-        responseHeaders[name] = value;
-      },
-      writeHead: (code, headers) => {
-        statusCode = code;
-        if (headers) {
-          Object.assign(responseHeaders, headers);
-        }
-      },
-      getHeader: (name) => {
-        return responseHeaders[name];
-      },
-    };
-
-    // Handle the request
-    await serverHandler.handler(mockRequest, mockResponse);
-
+    // For non-API routes, return 404 since we're handling static files differently
     return {
-      statusCode: statusCode,
-      headers: responseHeaders,
-      body: responseBody,
+      statusCode: 404,
+      headers: {
+        'Content-Type': 'text/html',
+      },
+      body: '<h1>404 - Not Found</h1>',
     };
 
   } catch (error) {
@@ -186,17 +219,13 @@ exports.handler = async (event, context) => {
     return {
       statusCode: 500,
       headers: {
-        'Content-Type': 'text/html',
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
       },
-      body: `
-        <html>
-          <body>
-            <h1>Internal Server Error</h1>
-            <p>An error occurred while processing your request.</p>
-            <pre>${error.message}</pre>
-          </body>
-        </html>
-      `,
+      body: JSON.stringify({ 
+        error: 'Internal server error',
+        message: error.message 
+      }),
     };
   }
 };

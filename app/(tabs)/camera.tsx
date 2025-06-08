@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Alert, Platform, Image } from 'react-native';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { CameraView, CameraType, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import ScreenContainer from '@/components/common/ScreenContainer';
 import Header from '@/components/common/Header';
@@ -50,7 +50,8 @@ interface CalorieAnalysisResult {
 export default function CameraScreen() {
   const router = useRouter();
   const [facing, setFacing] = useState<CameraType>('back');
-  const [permission, requestPermission] = useCameraPermissions();
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
   const [captureMode, setCaptureMode] = useState<CaptureMode>('photo');
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
   const [isRecording, setIsRecording] = useState(false);
@@ -67,29 +68,51 @@ export default function CameraScreen() {
   const [showInfoCard, setShowInfoCard] = useState(true);
   const cameraRef = useRef<CameraView>(null);
 
-  if (!permission) {
+  // Check if permissions are still loading
+  if (!cameraPermission || !microphonePermission) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Calorie Counter\" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
-          <Text style={styles.permissionText}>Loading camera permissions...</Text>
+          <Text style={styles.permissionText}>Loading permissions...</Text>
         </View>
       </ScreenContainer>
     );
   }
 
-  if (!permission.granted) {
+  // Check if permissions are granted
+  const hasAllPermissions = cameraPermission.granted && microphonePermission.granted;
+  const hasCameraPermission = cameraPermission.granted;
+
+  if (!hasAllPermissions) {
+    const requestAllPermissions = async () => {
+      if (!cameraPermission.granted) {
+        await requestCameraPermission();
+      }
+      if (!microphonePermission.granted) {
+        await requestMicrophonePermission();
+      }
+    };
+
     return (
       <ScreenContainer>
         <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <CameraIcon size={64} color={theme.colors.gray[400]} />
-          <Text style={styles.permissionTitle}>Camera Access Required</Text>
+          <Text style={styles.permissionTitle}>Permissions Required</Text>
           <Text style={styles.permissionText}>
-            We need access to your camera to take photos, record videos, analyze food items, and count calories.
+            We need access to your camera and microphone to take photos, record videos with audio, analyze food items, and count calories.
           </Text>
-          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-            <Text style={styles.permissionButtonText}>Grant Permission</Text>
+          <View style={styles.permissionStatus}>
+            <Text style={[styles.permissionStatusText, { color: hasCameraPermission ? theme.colors.success : theme.colors.error }]}>
+              Camera: {hasCameraPermission ? 'Granted' : 'Required'}
+            </Text>
+            <Text style={[styles.permissionStatusText, { color: microphonePermission.granted ? theme.colors.success : theme.colors.error }]}>
+              Microphone: {microphonePermission.granted ? 'Granted' : 'Required for video recording'}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.permissionButton} onPress={requestAllPermissions}>
+            <Text style={styles.permissionButtonText}>Grant Permissions</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -561,6 +584,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: theme.spacing.lg,
     lineHeight: 24,
+  },
+  permissionStatus: {
+    marginBottom: theme.spacing.lg,
+    alignItems: 'center',
+  },
+  permissionStatusText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    marginBottom: theme.spacing.xs,
   },
   permissionButton: {
     backgroundColor: theme.colors.primary,

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal, Alert, Platform } from 'react-native';
 import { usePantryItems } from '@/hooks/usePantryItems';
 import { theme } from '@/constants/theme';
-import { X, Mic, Square, Play, Pause, Trash2, Clock, FileAudio, Plus, Sparkles, Check } from 'lucide-react-native';
+import { X, Mic, Square, Play, Pause, Trash2, Clock, FileAudio, Plus, Sparkles, Check, MessageSquare } from 'lucide-react-native';
 import { PantryItem } from '@/types';
 
 interface VoiceNote {
@@ -23,6 +23,7 @@ interface VoiceNotesModalProps {
 }
 
 interface PantryAnalysisResult {
+  transcription?: string;
   pantryItems?: Array<{
     name: string;
     quantity: number;
@@ -31,8 +32,9 @@ interface PantryAnalysisResult {
     estimatedExpiryDays: number;
     notes: string;
   }>;
-  summary: string;
-  suggestions: string[];
+  summary?: string;
+  suggestions?: string[];
+  error?: string;
 }
 
 export default function VoiceNotesModal({
@@ -491,9 +493,28 @@ export default function VoiceNotesModal({
 
               {analysisResult && (
                 <ScrollView style={styles.analysisContent}>
-                  <Text style={styles.analysisSummary}>{analysisResult.summary}</Text>
+                  {/* Transcription Section */}
+                  {analysisResult.transcription && (
+                    <View style={styles.transcriptionSection}>
+                      <View style={styles.transcriptionHeader}>
+                        <MessageSquare size={20} color={theme.colors.primary} />
+                        <Text style={styles.transcriptionTitle}>Transcription</Text>
+                      </View>
+                      <View style={styles.transcriptionBox}>
+                        <Text style={styles.transcriptionText}>
+                          "{analysisResult.transcription}"
+                        </Text>
+                      </View>
+                    </View>
+                  )}
 
-                  {Array.isArray(analysisResult.pantryItems) && analysisResult.pantryItems.length > 0 && (
+                  {/* Summary */}
+                  {analysisResult.summary && (
+                    <Text style={styles.analysisSummary}>{analysisResult.summary}</Text>
+                  )}
+
+                  {/* Pantry Items Section */}
+                  {Array.isArray(analysisResult.pantryItems) && analysisResult.pantryItems.length > 0 ? (
                     <View style={styles.itemsSection}>
                       <Text style={styles.itemsSectionTitle}>Items to Add:</Text>
                       {analysisResult.pantryItems.map((item, index) => (
@@ -505,11 +526,22 @@ export default function VoiceNotesModal({
                           <Text style={styles.itemExpiry}>
                             Expires in {item.estimatedExpiryDays} days
                           </Text>
+                          {item.notes && (
+                            <Text style={styles.itemNotes}>{item.notes}</Text>
+                          )}
                         </View>
                       ))}
                     </View>
+                  ) : (
+                    <View style={styles.noItemsSection}>
+                      <Text style={styles.noItemsTitle}>No Food Items Detected</Text>
+                      <Text style={styles.noItemsText}>
+                        The AI couldn't identify any specific food items from your voice note. Try mentioning specific foods with quantities.
+                      </Text>
+                    </View>
                   )}
 
+                  {/* Storage Tips */}
                   {Array.isArray(analysisResult.suggestions) && analysisResult.suggestions.length > 0 && (
                     <View style={styles.suggestionsSection}>
                       <Text style={styles.suggestionsSectionTitle}>Storage Tips:</Text>
@@ -521,6 +553,14 @@ export default function VoiceNotesModal({
                     </View>
                   )}
 
+                  {/* Error Message */}
+                  {analysisResult.error && (
+                    <View style={styles.errorSection}>
+                      <Text style={styles.errorText}>{analysisResult.error}</Text>
+                    </View>
+                  )}
+
+                  {/* Add to Pantry Button */}
                   {Array.isArray(analysisResult.pantryItems) && analysisResult.pantryItems.length > 0 && (
                     <TouchableOpacity style={styles.addToPantryButton} onPress={addItemsToPantry}>
                       <Plus size={20} color="white" />
@@ -785,6 +825,34 @@ const styles = StyleSheet.create({
   analysisContent: {
     padding: theme.spacing.lg,
   },
+  transcriptionSection: {
+    marginBottom: theme.spacing.lg,
+  },
+  transcriptionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  transcriptionTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: theme.colors.text,
+  },
+  transcriptionBox: {
+    backgroundColor: theme.colors.gray[100],
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.primary,
+  },
+  transcriptionText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: theme.colors.text,
+    lineHeight: 20,
+    fontStyle: 'italic',
+  },
   analysisSummary: {
     fontFamily: 'Inter-Regular',
     fontSize: 16,
@@ -823,6 +891,33 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     fontSize: 12,
     color: theme.colors.warning,
+    marginBottom: 4,
+  },
+  itemNotes: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: theme.colors.gray[500],
+    fontStyle: 'italic',
+  },
+  noItemsSection: {
+    backgroundColor: theme.colors.gray[100],
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.lg,
+    alignItems: 'center',
+    marginBottom: theme.spacing.lg,
+  },
+  noItemsTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  noItemsText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: theme.colors.gray[600],
+    textAlign: 'center',
+    lineHeight: 20,
   },
   suggestionsSection: {
     marginBottom: theme.spacing.lg,
@@ -839,6 +934,18 @@ const styles = StyleSheet.create({
     color: theme.colors.gray[700],
     marginBottom: theme.spacing.xs,
     lineHeight: 18,
+  },
+  errorSection: {
+    backgroundColor: theme.colors.expired,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+  },
+  errorText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: theme.colors.error,
+    textAlign: 'center',
   },
   addToPantryButton: {
     backgroundColor: theme.colors.primary,

@@ -185,6 +185,9 @@ export default function CameraScreen() {
       }, 1000);
       setRecordingInterval(interval);
 
+      // Add a small delay to allow camera to stabilize before recording
+      await new Promise(resolve => setTimeout(resolve, 150));
+
       const video = await cameraRef.current.recordAsync({
         quality: '720p',
         maxDuration: 60, // 60 seconds max

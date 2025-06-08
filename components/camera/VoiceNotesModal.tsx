@@ -38,7 +38,7 @@ interface PantryAnalysisResult {
 export default function VoiceNotesModal({
   visible,
   onClose,
-  voiceNotes,
+  voiceNotes = [],
   onVoiceNoteAdded,
   onVoiceNoteDeleted,
 }: VoiceNotesModalProps) {

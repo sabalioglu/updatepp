@@ -67,6 +67,7 @@ export default function CameraScreen() {
   const [recordingInterval, setRecordingInterval] = useState<NodeJS.Timeout | null>(null);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [showInfoCard, setShowInfoCard] = useState(true);
+  const [isRecordingReady, setIsRecordingReady] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   // Check if permissions are still loading
@@ -177,7 +178,9 @@ export default function CameraScreen() {
     if (!cameraRef.current || isRecording) return;
 
     try {
+      console.log('Starting video recording...');
       setIsRecording(true);
+      setIsRecordingReady(false);
       setRecordingTime(0);
       setRecordingStartTime(Date.now());
       
@@ -187,25 +190,50 @@ export default function CameraScreen() {
       }, 1000);
       setRecordingInterval(interval);
 
-      // Add a small delay to allow camera to stabilize before recording
-      await new Promise(resolve => setTimeout(resolve, 150));
+      // Wait for camera to be ready before starting recording
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('Camera ready, starting recording...');
+      setIsRecordingReady(true);
 
       const video = await cameraRef.current.recordAsync({
         quality: '720p',
         maxDuration: 60, // 60 seconds max
+        mute: false, // Ensure audio is enabled
       });
+      
+      console.log('Recording completed:', video);
       
       if (video?.uri) {
         setCapturedMedia([video.uri]);
         setMediaType('video');
+        console.log('Video saved successfully:', video.uri);
+      } else {
+        console.error('No video URI returned');
+        throw new Error('No video data received');
       }
     } catch (error) {
       console.error('Error recording video:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to record video. Please try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Recording was stopped before any data could be produced')) {
+          errorMessage = 'Recording stopped too quickly. Please hold the record button longer.';
+        } else if (error.message.includes('permissions')) {
+          errorMessage = 'Camera or microphone permission denied. Please check your settings.';
+        } else if (error.message.includes('busy')) {
+          errorMessage = 'Camera is busy. Please wait a moment and try again.';
+        }
+      }
+      
       if (Platform.OS !== 'web') {
-        Alert.alert('Error', 'Failed to record video. Please try again.');
+        Alert.alert('Recording Error', errorMessage);
       }
     } finally {
       setIsRecording(false);
+      setIsRecordingReady(false);
       if (recordingInterval) {
         clearInterval(recordingInterval);
         setRecordingInterval(null);
@@ -215,23 +243,31 @@ export default function CameraScreen() {
     }
   };
 
-  const stopRecording = () => {
-    if (cameraRef.current && isRecording && recordingStartTime) {
+  const stopRecording = async () => {
+    if (!cameraRef.current || !isRecording || !recordingStartTime) {
+      console.log('Cannot stop recording: camera not ready or not recording');
+      return;
+    }
+
+    try {
       const recordingDuration = Date.now() - recordingStartTime;
-      const minimumRecordingTime = 500; // 500ms minimum recording time
+      const minimumRecordingTime = 1000; // 1 second minimum recording time
+      
+      console.log(`Recording duration: ${recordingDuration}ms`);
       
       if (recordingDuration < minimumRecordingTime) {
+        console.log(`Recording too short (${recordingDuration}ms), waiting...`);
         // If recording hasn't been going long enough, wait before stopping
         const remainingTime = minimumRecordingTime - recordingDuration;
-        setTimeout(() => {
-          if (cameraRef.current && isRecording) {
-            cameraRef.current.stopRecording();
-          }
-        }, remainingTime);
-      } else {
-        // Recording has been going long enough, stop immediately
-        cameraRef.current.stopRecording();
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
       }
+      
+      console.log('Stopping recording...');
+      await cameraRef.current.stopRecording();
+      console.log('Recording stopped successfully');
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+      // Don't show alert for stop errors as the recording might still complete
     }
   };
 
@@ -500,7 +536,7 @@ export default function CameraScreen() {
             <View style={styles.modeIndicator}>
               <Text style={styles.modeText}>
                 {captureMode.toUpperCase().replace('-', ' ')}
-                {isRecording && ` • REC ${formatTime(recordingTime)}`}
+                {isRecording && ` • ${isRecordingReady ? 'REC' : 'STARTING'} ${formatTime(recordingTime)}`}
               </Text>
             </View>
             
@@ -527,6 +563,9 @@ export default function CameraScreen() {
                   • Multi Photo: Multiple items at once{'\n'}
                   • Video: Record pantry inventory{'\n'}
                   • Calorie Counter: Nutritional analysis
+                </Text>
+                <Text style={styles.infoSubtext}>
+                  For video recording, hold the button for at least 1 second
                 </Text>
               </View>
             </View>
@@ -690,6 +729,14 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: theme.spacing.sm,
+  },
+  infoSubtext: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.6)',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   bottomControls: {
     position: 'absolute',

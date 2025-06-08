@@ -1,16 +1,16 @@
 import React, { useState, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Alert, Platform, Image } from 'react-native';
-import { CameraView, CameraType, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
+import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import ScreenContainer from '@/components/common/ScreenContainer';
 import Header from '@/components/common/Header';
 import FoodAnalysisModal from '@/components/camera/FoodAnalysisModal';
 import CalorieCounterModal from '@/components/camera/CalorieCounterModal';
 import { theme } from '@/constants/theme';
-import { Camera as CameraIcon, RotateCcw, Video, Square, Circle, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator, Play, Pause } from 'lucide-react-native';
+import { Camera as CameraIcon, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator } from 'lucide-react-native';
 import * as FileSystem from 'expo-file-system';
 
-type CaptureMode = 'photo' | 'video' | 'multi-photo';
+type CaptureMode = 'photo' | 'multi-photo';
 type FlashMode = 'off' | 'on' | 'auto';
 
 interface FoodAnalysisResult {
@@ -51,30 +51,24 @@ export default function CameraScreen() {
   const router = useRouter();
   const [facing, setFacing] = useState<CameraType>('back');
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
   const [captureMode, setCaptureMode] = useState<CaptureMode>('photo');
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
-  const [isRecording, setIsRecording] = useState(false);
   const [capturedMedia, setCapturedMedia] = useState<string[]>([]);
-  const [mediaType, setMediaType] = useState<'photo' | 'video' | 'multi-photo' | null>(null);
+  const [mediaType, setMediaType] = useState<'photo' | 'multi-photo' | null>(null);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [showCalorieModal, setShowCalorieModal] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<FoodAnalysisResult | null>(null);
   const [calorieResult, setCalorieResult] = useState<CalorieAnalysisResult | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const [recordingInterval, setRecordingInterval] = useState<NodeJS.Timeout | null>(null);
-  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [showInfoCard, setShowInfoCard] = useState(true);
-  const [isRecordingReady, setIsRecordingReady] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   // Check if permissions are still loading
-  if (!cameraPermission || !microphonePermission) {
+  if (!cameraPermission) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Calorie Counter\" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading permissions...</Text>
         </View>
@@ -82,39 +76,19 @@ export default function CameraScreen() {
     );
   }
 
-  // Check if permissions are granted
-  const hasAllPermissions = cameraPermission.granted && microphonePermission.granted;
-  const hasCameraPermission = cameraPermission.granted;
-
-  if (!hasAllPermissions) {
-    const requestAllPermissions = async () => {
-      if (!cameraPermission.granted) {
-        await requestCameraPermission();
-      }
-      if (!microphonePermission.granted) {
-        await requestMicrophonePermission();
-      }
-    };
-
+  // Check if camera permission is granted
+  if (!cameraPermission.granted) {
     return (
       <ScreenContainer>
         <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <CameraIcon size={64} color={theme.colors.gray[400]} />
-          <Text style={styles.permissionTitle}>Permissions Required</Text>
+          <Text style={styles.permissionTitle}>Camera Permission Required</Text>
           <Text style={styles.permissionText}>
-            We need access to your camera and microphone to take photos, record videos with audio, analyze food items, and count calories.
+            We need access to your camera to take photos, analyze food items, and count calories.
           </Text>
-          <View style={styles.permissionStatus}>
-            <Text style={[styles.permissionStatusText, { color: hasCameraPermission ? theme.colors.success : theme.colors.error }]}>
-              Camera: {hasCameraPermission ? 'Granted' : 'Required'}
-            </Text>
-            <Text style={[styles.permissionStatusText, { color: microphonePermission.granted ? theme.colors.success : theme.colors.error }]}>
-              Microphone: {microphonePermission.granted ? 'Granted' : 'Required for video recording'}
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.permissionButton} onPress={requestAllPermissions}>
-            <Text style={styles.permissionButtonText}>Grant Permissions</Text>
+          <TouchableOpacity style={styles.permissionButton} onPress={requestCameraPermission}>
+            <Text style={styles.permissionButtonText}>Grant Permission</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -126,15 +100,7 @@ export default function CameraScreen() {
   };
 
   const toggleCaptureMode = () => {
-    if (isRecording) return; // Don't allow mode change while recording
-    setCaptureMode(current => {
-      switch (current) {
-        case 'photo': return 'multi-photo';
-        case 'multi-photo': return 'video';
-        case 'video': return 'photo';
-        default: return 'photo';
-      }
-    });
+    setCaptureMode(current => current === 'photo' ? 'multi-photo' : 'photo');
   };
 
   const toggleFlashMode = () => {
@@ -171,115 +137,6 @@ export default function CameraScreen() {
       if (Platform.OS !== 'web') {
         Alert.alert('Error', 'Failed to take picture. Please try again.');
       }
-    }
-  };
-
-  const startRecording = async () => {
-    if (!cameraRef.current || isRecording) return;
-
-    try {
-      console.log('Starting video recording...');
-      setIsRecording(true);
-      setIsRecordingReady(false);
-      setRecordingTime(0);
-      setRecordingStartTime(Date.now());
-      
-      // Start recording timer
-      const interval = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
-      setRecordingInterval(interval);
-
-      // Wait for camera to be ready before starting recording - increased delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('Camera ready, starting recording...');
-      setIsRecordingReady(true);
-
-      const video = await cameraRef.current.recordAsync({
-        quality: '720p',
-        maxDuration: 60, // 60 seconds max
-        mute: false, // Ensure audio is enabled
-      });
-      
-      console.log('Recording completed:', video);
-      
-      if (video?.uri) {
-        setCapturedMedia([video.uri]);
-        setMediaType('video');
-        console.log('Video saved successfully:', video.uri);
-      } else {
-        console.error('No video URI returned');
-        throw new Error('No video data received');
-      }
-    } catch (error) {
-      console.error('Error recording video:', error);
-      
-      // Provide more specific error messages
-      let errorMessage = 'Failed to record video. Please try again.';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('Recording was stopped before any data could be produced')) {
-          errorMessage = 'Recording stopped too quickly. Please hold the record button for at least 2 seconds.';
-        } else if (error.message.includes('permissions')) {
-          errorMessage = 'Camera or microphone permission denied. Please check your settings.';
-        } else if (error.message.includes('busy')) {
-          errorMessage = 'Camera is busy. Please wait a moment and try again.';
-        }
-      }
-      
-      if (Platform.OS !== 'web') {
-        Alert.alert('Recording Error', errorMessage);
-      }
-    } finally {
-      setIsRecording(false);
-      setIsRecordingReady(false);
-      if (recordingInterval) {
-        clearInterval(recordingInterval);
-        setRecordingInterval(null);
-      }
-      setRecordingTime(0);
-      setRecordingStartTime(null);
-    }
-  };
-
-  const stopRecording = async () => {
-    if (!cameraRef.current || !isRecording || !isRecordingReady || !recordingStartTime) {
-      console.log('Cannot stop recording: camera not ready or not recording');
-      return;
-    }
-
-    try {
-      const recordingDuration = Date.now() - recordingStartTime;
-      const minimumRecordingTime = 2000; // 2 second minimum recording time
-      
-      console.log(`Recording duration: ${recordingDuration}ms`);
-      
-      if (recordingDuration < minimumRecordingTime) {
-        console.log(`Recording too short (${recordingDuration}ms), waiting...`);
-        // If recording hasn't been going long enough, wait before stopping
-        const remainingTime = minimumRecordingTime - recordingDuration;
-        await new Promise(resolve => setTimeout(resolve, remainingTime));
-      }
-      
-      console.log('Stopping recording...');
-      await cameraRef.current.stopRecording();
-      console.log('Recording stopped successfully');
-    } catch (error) {
-      console.error('Error stopping recording:', error);
-      // Don't show alert for stop errors as the recording might still complete
-    }
-  };
-
-  const handleCapture = () => {
-    if (captureMode === 'video') {
-      if (isRecording) {
-        stopRecording();
-      } else {
-        startRecording();
-      }
-    } else {
-      takePicture();
     }
   };
 
@@ -406,7 +263,7 @@ export default function CameraScreen() {
     if (Platform.OS !== 'web') {
       Alert.alert(
         'Media Captured',
-        `${mediaType === 'video' ? 'Video' : 'Photo(s)'} saved successfully!`,
+        `Photo${mediaType === 'multi-photo' ? 's' : ''} saved successfully!`,
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } else {
@@ -422,41 +279,19 @@ export default function CameraScreen() {
     }
   };
 
-  const getCaptureIcon = () => {
-    switch (captureMode) {
-      case 'video': return Video;
-      case 'multi-photo': return CameraIcon;
-      default: return CameraIcon;
-    }
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   // Preview captured media
   if (capturedMedia.length > 0) {
     return (
       <ScreenContainer scrollable={false} style={styles.container}>
         <View style={styles.previewContainer}>
-          {mediaType === 'video' ? (
-            <View style={styles.videoPreview}>
-              <Video size={64} color="white" />
-              <Text style={styles.videoPreviewText}>Video Recorded</Text>
-              <Text style={styles.videoPreviewSubtext}>{formatTime(recordingTime)} duration</Text>
-            </View>
-          ) : (
-            <View style={styles.photoPreviewContainer}>
-              <Image source={{ uri: capturedMedia[0] }} style={styles.previewMedia} />
-              {mediaType === 'multi-photo' && capturedMedia.length > 1 && (
-                <View style={styles.photoCounter}>
-                  <Text style={styles.photoCounterText}>{capturedMedia.length} photos</Text>
-                </View>
-              )}
-            </View>
-          )}
+          <View style={styles.photoPreviewContainer}>
+            <Image source={{ uri: capturedMedia[0] }} style={styles.previewMedia} />
+            {mediaType === 'multi-photo' && capturedMedia.length > 1 && (
+              <View style={styles.photoCounter}>
+                <Text style={styles.photoCounterText}>{capturedMedia.length} photos</Text>
+              </View>
+            )}
+          </View>
           
           <View style={styles.previewActions}>
             <TouchableOpacity style={styles.previewActionButton} onPress={retakeMedia}>
@@ -464,32 +299,28 @@ export default function CameraScreen() {
               <Text style={styles.previewActionText}>Retake</Text>
             </TouchableOpacity>
             
-            {(mediaType === 'photo' || mediaType === 'multi-photo') && (
-              <>
-                <TouchableOpacity 
-                  style={[styles.previewActionButton, styles.analyzeButton]} 
-                  onPress={analyzeFood}
-                >
-                  <Sparkles size={20} color="white" />
-                  <Text style={styles.previewActionText}>Analyze Food</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.previewActionButton, styles.calorieButton]} 
-                  onPress={countCalories}
-                >
-                  <Calculator size={20} color="white" />
-                  <Text style={styles.previewActionText}>Count Calories</Text>
-                </TouchableOpacity>
-              </>
-            )}
+            <TouchableOpacity 
+              style={[styles.previewActionButton, styles.analyzeButton]} 
+              onPress={analyzeFood}
+            >
+              <Sparkles size={20} color="white" />
+              <Text style={styles.previewActionText}>Analyze Food</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.previewActionButton, styles.calorieButton]} 
+              onPress={countCalories}
+            >
+              <Calculator size={20} color="white" />
+              <Text style={styles.previewActionText}>Count Calories</Text>
+            </TouchableOpacity>
             
             <TouchableOpacity 
               style={[styles.previewActionButton, styles.useButton]} 
               onPress={useMedia}
             >
               <Check size={20} color="white" />
-              <Text style={styles.previewActionText}>Use {mediaType}</Text>
+              <Text style={styles.previewActionText}>Use Photo{mediaType === 'multi-photo' ? 's' : ''}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -536,7 +367,6 @@ export default function CameraScreen() {
             <View style={styles.modeIndicator}>
               <Text style={styles.modeText}>
                 {captureMode.toUpperCase().replace('-', ' ')}
-                {isRecording && ` • ${isRecordingReady ? 'REC' : 'STARTING'} ${formatTime(recordingTime)}`}
               </Text>
             </View>
             
@@ -557,15 +387,15 @@ export default function CameraScreen() {
                 </TouchableOpacity>
                 
                 <Calculator size={32} color={theme.colors.primary} />
-                <Text style={styles.infoTitle}>Multi-Function Camera</Text>
+                <Text style={styles.infoTitle}>Smart Food Camera</Text>
                 <Text style={styles.infoText}>
                   • Single Photo: Quick food analysis{'\n'}
                   • Multi Photo: Multiple items at once{'\n'}
-                  • Video: Record pantry inventory{'\n'}
+                  • AI Food Recognition: Identify ingredients{'\n'}
                   • Calorie Counter: Nutritional analysis
                 </Text>
                 <Text style={styles.infoSubtext}>
-                  For video recording, hold the button for at least 2 seconds
+                  Perfect for pantry management and meal tracking
                 </Text>
               </View>
             </View>
@@ -576,37 +406,18 @@ export default function CameraScreen() {
             <TouchableOpacity 
               style={styles.modeButton} 
               onPress={toggleCaptureMode}
-              disabled={isRecording}
             >
-              {React.createElement(getCaptureIcon(), { 
-                size: 24, 
-                color: isRecording ? theme.colors.gray[400] : 'white' 
-              })}
-              <Text style={[
-                styles.modeButtonText,
-                { color: isRecording ? theme.colors.gray[400] : 'white' }
-              ]}>
-                {captureMode === 'multi-photo' ? 'Multi' : captureMode}
+              <CameraIcon size={24} color="white" />
+              <Text style={styles.modeButtonText}>
+                {captureMode === 'multi-photo' ? 'Multi' : 'Single'}
               </Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[
-                styles.captureButton,
-                captureMode === 'video' && styles.videoCaptureButton,
-                isRecording && styles.recordingButton
-              ]} 
-              onPress={handleCapture}
+              style={styles.captureButton} 
+              onPress={takePicture}
             >
-              {captureMode === 'video' ? (
-                isRecording ? (
-                  <Square size={24} color="white" fill="white" />
-                ) : (
-                  <Circle size={32} color={theme.colors.error} fill={theme.colors.error} />
-                )
-              ) : (
-                <Circle size={32} color="white" fill="white" />
-              )}
+              <View style={styles.captureButtonInner} />
             </TouchableOpacity>
             
             <View style={styles.placeholder} />
@@ -643,15 +454,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: theme.spacing.lg,
     lineHeight: 24,
-  },
-  permissionStatus: {
-    marginBottom: theme.spacing.lg,
-    alignItems: 'center',
-  },
-  permissionStatusText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 14,
-    marginBottom: theme.spacing.xs,
   },
   permissionButton: {
     backgroundColor: theme.colors.primary,
@@ -759,6 +561,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     fontSize: 10,
     marginTop: 2,
+    color: 'white',
   },
   captureButton: {
     width: 80,
@@ -770,12 +573,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  videoCaptureButton: {
-    borderColor: theme.colors.error,
-  },
-  recordingButton: {
-    backgroundColor: theme.colors.error,
-    borderColor: theme.colors.error,
+  captureButtonInner: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'white',
   },
   placeholder: {
     width: 60,
@@ -806,24 +608,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     fontSize: 12,
     color: 'white',
-  },
-  videoPreview: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'black',
-  },
-  videoPreviewText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 18,
-    color: 'white',
-    marginTop: theme.spacing.md,
-  },
-  videoPreviewSubtext: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: theme.spacing.xs,
   },
   previewActions: {
     position: 'absolute',

@@ -11,11 +11,6 @@
     "ios": {
       "supportsTablet": true
     },
-    "android": {
-      "permissions": [
-        "android.permission.RECORD_AUDIO"
-      ]
-    },
     "web": {
       "bundler": "metro",
       "output": "static",

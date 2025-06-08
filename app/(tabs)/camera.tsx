@@ -72,7 +72,7 @@ export default function CameraScreen() {
   if (!cameraPermission || !microphonePermission) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Calorie Counter\" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading permissions...</Text>
         </View>

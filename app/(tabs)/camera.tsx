@@ -64,12 +64,13 @@ export default function CameraScreen() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordingInterval, setRecordingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [showInfoCard, setShowInfoCard] = useState(true);
   const cameraRef = useRef<CameraView>(null);
 
   if (!permission) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Calorie Counter\" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading camera permissions...</Text>
         </View>
@@ -465,19 +466,28 @@ export default function CameraScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Center Info */}
-          <View style={styles.centerInfo}>
-            <View style={styles.infoCard}>
-              <Calculator size={32} color={theme.colors.primary} />
-              <Text style={styles.infoTitle}>Multi-Function Camera</Text>
-              <Text style={styles.infoText}>
-                • Single Photo: Quick food analysis{'\n'}
-                • Multi Photo: Multiple items at once{'\n'}
-                • Video: Record pantry inventory{'\n'}
-                • Calorie Counter: Nutritional analysis
-              </Text>
+          {/* Center Info Card with Close Button */}
+          {showInfoCard && (
+            <View style={styles.centerInfo}>
+              <View style={styles.infoCard}>
+                <TouchableOpacity 
+                  style={styles.infoCloseButton}
+                  onPress={() => setShowInfoCard(false)}
+                >
+                  <X size={20} color="white" />
+                </TouchableOpacity>
+                
+                <Calculator size={32} color={theme.colors.primary} />
+                <Text style={styles.infoTitle}>Multi-Function Camera</Text>
+                <Text style={styles.infoText}>
+                  • Single Photo: Quick food analysis{'\n'}
+                  • Multi Photo: Multiple items at once{'\n'}
+                  • Video: Record pantry inventory{'\n'}
+                  • Calorie Counter: Nutritional analysis
+                </Text>
+              </View>
             </View>
-          </View>
+          )}
 
           {/* Bottom Controls */}
           <View style={styles.bottomControls}>
@@ -604,6 +614,16 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     alignItems: 'center',
     maxWidth: 300,
+    position: 'relative',
+  },
+  infoCloseButton: {
+    position: 'absolute',
+    top: theme.spacing.sm,
+    right: theme.spacing.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: theme.borderRadius.round,
+    padding: theme.spacing.xs,
+    zIndex: 1,
   },
   infoTitle: {
     fontFamily: 'Poppins-SemiBold',

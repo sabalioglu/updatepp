@@ -7,12 +7,11 @@ import Header from '@/components/common/Header';
 import FoodAnalysisModal from '@/components/camera/FoodAnalysisModal';
 import CalorieCounterModal from '@/components/camera/CalorieCounterModal';
 import { theme } from '@/constants/theme';
-import { Camera as CameraIcon, RotateCcw, Video, Square, Circle, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator } from 'lucide-react-native';
+import { Camera as CameraIcon, RotateCcw, Video, Square, Circle, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator, Play, Pause } from 'lucide-react-native';
 import * as FileSystem from 'expo-file-system';
 
-type CaptureMode = 'photo' | 'video';
+type CaptureMode = 'photo' | 'video' | 'multi-photo';
 type FlashMode = 'off' | 'on' | 'auto';
-type AnalysisMode = 'food' | 'calorie';
 
 interface FoodAnalysisResult {
   identifiedFoods: string[];
@@ -55,20 +54,22 @@ export default function CameraScreen() {
   const [captureMode, setCaptureMode] = useState<CaptureMode>('photo');
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
   const [isRecording, setIsRecording] = useState(false);
-  const [capturedMedia, setCapturedMedia] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<'photo' | 'video' | null>(null);
+  const [capturedMedia, setCapturedMedia] = useState<string[]>([]);
+  const [mediaType, setMediaType] = useState<'photo' | 'video' | 'multi-photo' | null>(null);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [showCalorieModal, setShowCalorieModal] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<FoodAnalysisResult | null>(null);
   const [calorieResult, setCalorieResult] = useState<CalorieAnalysisResult | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [recordingInterval, setRecordingInterval] = useState<NodeJS.Timeout | null>(null);
   const cameraRef = useRef<CameraView>(null);
 
   if (!permission) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Calorie Counter\" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Calorie Counter" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading camera permissions...</Text>
         </View>
@@ -84,7 +85,7 @@ export default function CameraScreen() {
           <CameraIcon size={64} color={theme.colors.gray[400]} />
           <Text style={styles.permissionTitle}>Camera Access Required</Text>
           <Text style={styles.permissionText}>
-            We need access to your camera to take photos, analyze food items, and count calories.
+            We need access to your camera to take photos, record videos, analyze food items, and count calories.
           </Text>
           <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
             <Text style={styles.permissionButtonText}>Grant Permission</Text>
@@ -100,7 +101,14 @@ export default function CameraScreen() {
 
   const toggleCaptureMode = () => {
     if (isRecording) return; // Don't allow mode change while recording
-    setCaptureMode(current => current === 'photo' ? 'video' : 'photo');
+    setCaptureMode(current => {
+      switch (current) {
+        case 'photo': return 'multi-photo';
+        case 'multi-photo': return 'video';
+        case 'video': return 'photo';
+        default: return 'photo';
+      }
+    });
   };
 
   const toggleFlashMode = () => {
@@ -124,8 +132,13 @@ export default function CameraScreen() {
       });
       
       if (photo?.uri) {
-        setCapturedMedia(photo.uri);
-        setMediaType('photo');
+        if (captureMode === 'multi-photo') {
+          setCapturedMedia(prev => [...prev, photo.uri]);
+          setMediaType('multi-photo');
+        } else {
+          setCapturedMedia([photo.uri]);
+          setMediaType('photo');
+        }
       }
     } catch (error) {
       console.error('Error taking picture:', error);
@@ -140,13 +153,21 @@ export default function CameraScreen() {
 
     try {
       setIsRecording(true);
+      setRecordingTime(0);
+      
+      // Start recording timer
+      const interval = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+      setRecordingInterval(interval);
+
       const video = await cameraRef.current.recordAsync({
         quality: '720p',
-        maxDuration: 30, // 30 seconds max
+        maxDuration: 60, // 60 seconds max
       });
       
       if (video?.uri) {
-        setCapturedMedia(video.uri);
+        setCapturedMedia([video.uri]);
         setMediaType('video');
       }
     } catch (error) {
@@ -156,6 +177,11 @@ export default function CameraScreen() {
       }
     } finally {
       setIsRecording(false);
+      if (recordingInterval) {
+        clearInterval(recordingInterval);
+        setRecordingInterval(null);
+      }
+      setRecordingTime(0);
     }
   };
 
@@ -166,19 +192,19 @@ export default function CameraScreen() {
   };
 
   const handleCapture = () => {
-    if (captureMode === 'photo') {
-      takePicture();
-    } else {
+    if (captureMode === 'video') {
       if (isRecording) {
         stopRecording();
       } else {
         startRecording();
       }
+    } else {
+      takePicture();
     }
   };
 
   const retakeMedia = () => {
-    setCapturedMedia(null);
+    setCapturedMedia([]);
     setMediaType(null);
     setAnalysisResult(null);
     setCalorieResult(null);
@@ -215,7 +241,7 @@ export default function CameraScreen() {
   };
 
   const analyzeFood = async () => {
-    if (!capturedMedia || mediaType !== 'photo') {
+    if (capturedMedia.length === 0 || (mediaType !== 'photo' && mediaType !== 'multi-photo')) {
       setAnalysisError('Only photos can be analyzed for food recognition');
       return;
     }
@@ -225,8 +251,8 @@ export default function CameraScreen() {
     setShowAnalysisModal(true);
 
     try {
-      // Convert image to base64 using platform-specific method
-      const base64 = await convertImageToBase64(capturedMedia);
+      // Use the first image for analysis
+      const base64 = await convertImageToBase64(capturedMedia[0]);
 
       // Call our API route
       const response = await fetch('/api/food-recognition', {
@@ -255,7 +281,7 @@ export default function CameraScreen() {
   };
 
   const countCalories = async () => {
-    if (!capturedMedia || mediaType !== 'photo') {
+    if (capturedMedia.length === 0 || (mediaType !== 'photo' && mediaType !== 'multi-photo')) {
       setAnalysisError('Only photos can be analyzed for calorie counting');
       return;
     }
@@ -265,8 +291,8 @@ export default function CameraScreen() {
     setShowCalorieModal(true);
 
     try {
-      // Convert image to base64 using platform-specific method
-      const base64 = await convertImageToBase64(capturedMedia);
+      // Use the first image for analysis
+      const base64 = await convertImageToBase64(capturedMedia[0]);
 
       // Call our API route for calorie counting
       const response = await fetch('/api/calorie-counter', {
@@ -300,7 +326,7 @@ export default function CameraScreen() {
     if (Platform.OS !== 'web') {
       Alert.alert(
         'Media Captured',
-        `${mediaType === 'photo' ? 'Photo' : 'Video'} saved successfully!`,
+        `${mediaType === 'video' ? 'Video' : 'Photo(s)'} saved successfully!`,
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } else {
@@ -316,33 +342,55 @@ export default function CameraScreen() {
     }
   };
 
+  const getCaptureIcon = () => {
+    switch (captureMode) {
+      case 'video': return Video;
+      case 'multi-photo': return CameraIcon;
+      default: return CameraIcon;
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Preview captured media
-  if (capturedMedia) {
+  if (capturedMedia.length > 0) {
     return (
       <ScreenContainer scrollable={false} style={styles.container}>
         <View style={styles.previewContainer}>
-          {mediaType === 'photo' ? (
-            <Image source={{ uri: capturedMedia }} style={styles.previewMedia} />
-          ) : (
+          {mediaType === 'video' ? (
             <View style={styles.videoPreview}>
               <Video size={64} color="white" />
               <Text style={styles.videoPreviewText}>Video Recorded</Text>
+              <Text style={styles.videoPreviewSubtext}>{formatTime(recordingTime)} duration</Text>
+            </View>
+          ) : (
+            <View style={styles.photoPreviewContainer}>
+              <Image source={{ uri: capturedMedia[0] }} style={styles.previewMedia} />
+              {mediaType === 'multi-photo' && capturedMedia.length > 1 && (
+                <View style={styles.photoCounter}>
+                  <Text style={styles.photoCounterText}>{capturedMedia.length} photos</Text>
+                </View>
+              )}
             </View>
           )}
           
           <View style={styles.previewActions}>
             <TouchableOpacity style={styles.previewActionButton} onPress={retakeMedia}>
-              <X size={24} color="white" />
+              <X size={20} color="white" />
               <Text style={styles.previewActionText}>Retake</Text>
             </TouchableOpacity>
             
-            {mediaType === 'photo' && (
+            {(mediaType === 'photo' || mediaType === 'multi-photo') && (
               <>
                 <TouchableOpacity 
                   style={[styles.previewActionButton, styles.analyzeButton]} 
                   onPress={analyzeFood}
                 >
-                  <Sparkles size={24} color="white" />
+                  <Sparkles size={20} color="white" />
                   <Text style={styles.previewActionText}>Analyze Food</Text>
                 </TouchableOpacity>
                 
@@ -350,7 +398,7 @@ export default function CameraScreen() {
                   style={[styles.previewActionButton, styles.calorieButton]} 
                   onPress={countCalories}
                 >
-                  <Calculator size={24} color="white" />
+                  <Calculator size={20} color="white" />
                   <Text style={styles.previewActionText}>Count Calories</Text>
                 </TouchableOpacity>
               </>
@@ -360,7 +408,7 @@ export default function CameraScreen() {
               style={[styles.previewActionButton, styles.useButton]} 
               onPress={useMedia}
             >
-              <Check size={24} color="white" />
+              <Check size={20} color="white" />
               <Text style={styles.previewActionText}>Use {mediaType}</Text>
             </TouchableOpacity>
           </View>
@@ -407,8 +455,8 @@ export default function CameraScreen() {
             
             <View style={styles.modeIndicator}>
               <Text style={styles.modeText}>
-                {captureMode.toUpperCase()}
-                {isRecording && ' • REC'}
+                {captureMode.toUpperCase().replace('-', ' ')}
+                {isRecording && ` • REC ${formatTime(recordingTime)}`}
               </Text>
             </View>
             
@@ -421,9 +469,12 @@ export default function CameraScreen() {
           <View style={styles.centerInfo}>
             <View style={styles.infoCard}>
               <Calculator size={32} color={theme.colors.primary} />
-              <Text style={styles.infoTitle}>Calorie Counter</Text>
+              <Text style={styles.infoTitle}>Multi-Function Camera</Text>
               <Text style={styles.infoText}>
-                Take a photo of your meal to get detailed nutritional information and calorie count
+                • Single Photo: Quick food analysis{'\n'}
+                • Multi Photo: Multiple items at once{'\n'}
+                • Video: Record pantry inventory{'\n'}
+                • Calorie Counter: Nutritional analysis
               </Text>
             </View>
           </View>
@@ -435,11 +486,16 @@ export default function CameraScreen() {
               onPress={toggleCaptureMode}
               disabled={isRecording}
             >
-              {captureMode === 'photo' ? (
-                <Video size={24} color={isRecording ? theme.colors.gray[400] : 'white'} />
-              ) : (
-                <CameraIcon size={24} color={isRecording ? theme.colors.gray[400] : 'white'} />
-              )}
+              {React.createElement(getCaptureIcon(), { 
+                size: 24, 
+                color: isRecording ? theme.colors.gray[400] : 'white' 
+              })}
+              <Text style={[
+                styles.modeButtonText,
+                { color: isRecording ? theme.colors.gray[400] : 'white' }
+              ]}>
+                {captureMode === 'multi-photo' ? 'Multi' : captureMode}
+              </Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -450,12 +506,14 @@ export default function CameraScreen() {
               ]} 
               onPress={handleCapture}
             >
-              {captureMode === 'photo' ? (
-                <Circle size={32} color="white" fill="white" />
-              ) : isRecording ? (
-                <Square size={24} color="white" fill="white" />
+              {captureMode === 'video' ? (
+                isRecording ? (
+                  <Square size={24} color="white" fill="white" />
+                ) : (
+                  <Circle size={32} color={theme.colors.error} fill={theme.colors.error} />
+                )
               ) : (
-                <Circle size={32} color={theme.colors.error} fill={theme.colors.error} />
+                <Circle size={32} color="white" fill="white" />
               )}
             </TouchableOpacity>
             
@@ -545,7 +603,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.lg,
     alignItems: 'center',
-    maxWidth: 280,
+    maxWidth: 300,
   },
   infoTitle: {
     fontFamily: 'Poppins-SemiBold',
@@ -573,8 +631,15 @@ const styles = StyleSheet.create({
   },
   modeButton: {
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: theme.borderRadius.round,
-    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.sm,
+    alignItems: 'center',
+    minWidth: 60,
+  },
+  modeButtonText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 10,
+    marginTop: 2,
   },
   captureButton: {
     width: 80,
@@ -594,16 +659,34 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.error,
   },
   placeholder: {
-    width: 56,
-    height: 56,
+    width: 60,
+    height: 60,
   },
   previewContainer: {
     flex: 1,
     backgroundColor: 'black',
   },
+  photoPreviewContainer: {
+    flex: 1,
+    position: 'relative',
+  },
   previewMedia: {
     flex: 1,
     width: '100%',
+  },
+  photoCounter: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  photoCounterText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: 'white',
   },
   videoPreview: {
     flex: 1,
@@ -616,6 +699,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: 'white',
     marginTop: theme.spacing.md,
+  },
+  videoPreviewSubtext: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginTop: theme.spacing.xs,
   },
   previewActions: {
     position: 'absolute',

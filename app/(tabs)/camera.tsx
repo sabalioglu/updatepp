@@ -65,6 +65,7 @@ export default function CameraScreen() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordingInterval, setRecordingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [showInfoCard, setShowInfoCard] = useState(true);
   const cameraRef = useRef<CameraView>(null);
 
@@ -178,6 +179,7 @@ export default function CameraScreen() {
     try {
       setIsRecording(true);
       setRecordingTime(0);
+      setRecordingStartTime(Date.now());
       
       // Start recording timer
       const interval = setInterval(() => {
@@ -209,12 +211,27 @@ export default function CameraScreen() {
         setRecordingInterval(null);
       }
       setRecordingTime(0);
+      setRecordingStartTime(null);
     }
   };
 
   const stopRecording = () => {
-    if (cameraRef.current && isRecording) {
-      cameraRef.current.stopRecording();
+    if (cameraRef.current && isRecording && recordingStartTime) {
+      const recordingDuration = Date.now() - recordingStartTime;
+      const minimumRecordingTime = 500; // 500ms minimum recording time
+      
+      if (recordingDuration < minimumRecordingTime) {
+        // If recording hasn't been going long enough, wait before stopping
+        const remainingTime = minimumRecordingTime - recordingDuration;
+        setTimeout(() => {
+          if (cameraRef.current && isRecording) {
+            cameraRef.current.stopRecording();
+          }
+        }, remainingTime);
+      } else {
+        // Recording has been going long enough, stop immediately
+        cameraRef.current.stopRecording();
+      }
     }
   };
 

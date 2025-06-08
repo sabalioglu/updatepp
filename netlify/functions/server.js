@@ -5,13 +5,15 @@ const fs = require('fs');
 let serverHandler;
 
 try {
-  // The Expo Router server bundle is in dist/server/_expo/functions
-  const serverPath = path.join(process.cwd(), 'dist', 'server', '_expo', 'functions');
+  // Fix the paths to correctly point to the dist directory
+  // __dirname is netlify/functions, so we need to go up two levels to reach the project root
+  const projectRoot = path.resolve(__dirname, '..', '..');
+  const serverPath = path.join(projectRoot, 'dist', 'server', '_expo', 'functions');
   
   // Check if the functions directory exists and load the handler
   if (fs.existsSync(serverPath)) {
     // Load the routes configuration
-    const routesPath = path.join(process.cwd(), 'dist', 'server', '_expo', 'routes.json');
+    const routesPath = path.join(projectRoot, 'dist', 'server', '_expo', 'routes.json');
     let routes = {};
     
     if (fs.existsSync(routesPath)) {
@@ -61,9 +63,9 @@ try {
           }
         }
         
-        // Handle static files and pages
-        const clientPath = path.join(process.cwd(), 'dist', 'client');
-        const serverStaticPath = path.join(process.cwd(), 'dist', 'server');
+        // Handle static files and pages - use corrected paths
+        const clientPath = path.join(projectRoot, 'dist', 'client');
+        const serverStaticPath = path.join(projectRoot, 'dist', 'server');
         
         // Try to serve from client directory first
         let filePath = path.join(clientPath, pathname === '/' ? 'index.html' : pathname);
@@ -105,6 +107,7 @@ try {
     };
   } else {
     console.error('Server functions directory not found:', serverPath);
+    console.log('Available directories:', fs.readdirSync(path.join(projectRoot, 'dist')));
   }
 } catch (error) {
   console.error('Error setting up server handler:', error);

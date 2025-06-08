@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, FlatList, View, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, FlatList, View, Text, TouchableOpacity, Modal } from 'react-native';
 import { usePantryItems } from '@/hooks/usePantryItems';
 import { useRouter } from 'expo-router';
 import ScreenContainer from '@/components/common/ScreenContainer';
@@ -8,12 +8,13 @@ import PantryItem from '@/components/pantry/PantryItem';
 import EmptyState from '@/components/common/EmptyState';
 import { PantryItem as PantryItemType, FoodCategory } from '@/types';
 import { theme } from '@/constants/theme';
-import { ShoppingBag, Refrigerator } from 'lucide-react-native';
+import { ShoppingBag, Refrigerator, Camera, FileText, X } from 'lucide-react-native';
 
 export default function PantryScreen() {
   const router = useRouter();
   const { items, loading, error, removeItem } = usePantryItems();
   const [selectedCategory, setSelectedCategory] = useState<FoodCategory | 'all'>('all');
+  const [showAddModal, setShowAddModal] = useState(false);
   
   const foodCategories: { label: string; value: FoodCategory | 'all' }[] = [
     { label: 'All', value: 'all' },
@@ -34,8 +35,18 @@ export default function PantryScreen() {
     : items.filter(item => item.category === selectedCategory);
   
   const handleAddItem = () => {
-    // Navigate to add item screen (would be implemented in a real app)
-    console.log('Add item');
+    setShowAddModal(true);
+  };
+  
+  const handleAddViaCamera = () => {
+    setShowAddModal(false);
+    router.push('/camera');
+  };
+  
+  const handleAddViaForm = () => {
+    setShowAddModal(false);
+    // Navigate to add item form (would be implemented in a real app)
+    console.log('Add item via form');
   };
   
   const handleItemPress = (item: PantryItemType) => {
@@ -63,9 +74,9 @@ export default function PantryScreen() {
   
   const renderEmptyState = () => (
     <EmptyState
-      title="Your pantry is empty"
-      message="Add items to your pantry to keep track of what you have and get recipe suggestions."
-      actionLabel="Add Item"
+      title="Add inventory to get suggestions"
+      message="Start by adding items to your pantry using the camera or manual entry to get personalized recipe recommendations."
+      actionLabel="Add Items"
       onAction={handleAddItem}
       icon={<Refrigerator size={48} color={theme.colors.gray[400]} />}
     />
@@ -134,6 +145,49 @@ export default function PantryScreen() {
         <ShoppingBag size={20} color="white" />
         <Text style={styles.shoppingListButtonText}>Shopping List</Text>
       </TouchableOpacity>
+
+      {/* Add Item Modal */}
+      <Modal
+        visible={showAddModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Inventory</Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <X size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.modalDescription}>
+              Choose how you'd like to add items to your pantry
+            </Text>
+            
+            <TouchableOpacity style={styles.modalOption} onPress={handleAddViaCamera}>
+              <Camera size={24} color={theme.colors.primary} />
+              <View style={styles.modalOptionText}>
+                <Text style={styles.modalOptionTitle}>Use Camera</Text>
+                <Text style={styles.modalOptionSubtitle}>
+                  Take a photo to automatically identify and add items
+                </Text>
+              </View>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.modalOption} onPress={handleAddViaForm}>
+              <FileText size={24} color={theme.colors.secondary} />
+              <View style={styles.modalOptionText}>
+                <Text style={styles.modalOptionTitle}>Manual Entry</Text>
+                <Text style={styles.modalOptionSubtitle}>
+                  Add items manually using a form
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -194,5 +248,57 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'white',
     marginLeft: theme.spacing.xs,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: theme.borderRadius.xl,
+    borderTopRightRadius: theme.borderRadius.xl,
+    padding: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
+  },
+  modalTitle: {
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 20,
+    color: theme.colors.text,
+  },
+  modalDescription: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: theme.colors.gray[600],
+    marginBottom: theme.spacing.lg,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.gray[100],
+    marginBottom: theme.spacing.md,
+  },
+  modalOptionText: {
+    marginLeft: theme.spacing.md,
+    flex: 1,
+  },
+  modalOptionTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: theme.colors.text,
+    marginBottom: 2,
+  },
+  modalOptionSubtitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: theme.colors.gray[600],
   },
 });

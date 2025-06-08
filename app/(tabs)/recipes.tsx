@@ -9,7 +9,7 @@ import RecipeCard from '@/components/recipes/RecipeCard';
 import EmptyState from '@/components/common/EmptyState';
 import { Recipe } from '@/types';
 import { theme } from '@/constants/theme';
-import { BookOpen } from 'lucide-react-native';
+import { BookOpen, Camera } from 'lucide-react-native';
 
 export default function RecipesScreen() {
   const router = useRouter();
@@ -50,27 +50,41 @@ export default function RecipesScreen() {
     />
   ), []);
   
-  const renderEmptyState = () => (
-    <EmptyState
-      title="No recipes found"
-      message={
-        filter === 'favorites'
-          ? "You haven't added any recipes to your favorites yet."
-          : filter === 'pantry'
-          ? "There are no recipes that match your current pantry items."
-          : "Add your favorite recipes to get started cooking delicious meals."
-      }
-      actionLabel={filter === 'all' ? "Add Recipe" : "View All Recipes"}
-      onAction={() => {
-        if (filter === 'all') {
-          handleAddRecipe();
-        } else {
-          setFilter('all');
+  const renderEmptyState = () => {
+    if (items.length === 0) {
+      return (
+        <EmptyState
+          title="Add pantry items to get recipe suggestions"
+          message="Start by scanning your pantry items with the camera or adding them manually to get AI-powered recipe recommendations."
+          actionLabel="Scan Pantry"
+          onAction={() => router.push('/camera')}
+          icon={<Camera size={48} color={theme.colors.gray[400]} />}
+        />
+      );
+    }
+
+    return (
+      <EmptyState
+        title="No recipes found"
+        message={
+          filter === 'favorites'
+            ? "You haven't added any recipes to your favorites yet."
+            : filter === 'pantry'
+            ? "There are no recipes that match your current pantry items. Try adding more ingredients to your pantry."
+            : "Add your favorite recipes to get started cooking delicious meals."
         }
-      }}
-      icon={<BookOpen size={48} color={theme.colors.gray[400]} />}
-    />
-  );
+        actionLabel={filter === 'all' ? "Add Recipe" : "View All Recipes"}
+        onAction={() => {
+          if (filter === 'all') {
+            handleAddRecipe();
+          } else {
+            setFilter('all');
+          }
+        }}
+        icon={<BookOpen size={48} color={theme.colors.gray[400]} />}
+      />
+    );
+  };
 
   return (
     <ScreenContainer scrollable={false} style={styles.container}>

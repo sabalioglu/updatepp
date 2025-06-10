@@ -1,6 +1,6 @@
 export async function POST(request: Request) {
   try {
-    const { audioBase64, transcription } = await request.json();
+    const { audioBase64, transcription, mimeType } = await request.json();
     
     if (!transcription && !audioBase64) {
       return new Response(
@@ -31,6 +31,9 @@ export async function POST(request: Request) {
       const transcriptionPrompt = `Transcribe the following audio into plain text. Return only the raw transcription, no summary, analysis, or additional comments. If the audio is not clear, transcribe as accurately as possible.`;
 
       try {
+        // Use the provided mimeType or fallback to audio/mp4 for better compatibility
+        const audioMimeType = mimeType || 'audio/mp4';
+        
         const transcriptionResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: {
@@ -45,7 +48,7 @@ export async function POST(request: Request) {
                   },
                   {
                     inline_data: {
-                      mime_type: "audio/wav",
+                      mime_type: audioMimeType,
                       data: audioBase64
                     }
                   }

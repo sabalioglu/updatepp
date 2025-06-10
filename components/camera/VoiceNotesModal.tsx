@@ -15,6 +15,7 @@ interface VoiceNote {
   timestamp: string;
   transcription?: string;
   processed?: boolean;
+  mimeType?: string;
 }
 
 interface VoiceNotesModalProps {
@@ -157,6 +158,15 @@ export default function VoiceNotesModal({
     }
   };
 
+  const getMimeTypeForPlatform = (): string => {
+    if (Platform.OS === 'web') {
+      return 'audio/webm;codecs=opus';
+    } else {
+      // Native platforms use .m4a format
+      return 'audio/mp4';
+    }
+  };
+
   const startRecording = async () => {
     if (!recordingPermission) {
       Alert.alert('Permission Required', 'Microphone access is required to record voice notes.');
@@ -197,7 +207,7 @@ export default function VoiceNotesModal({
 
         mediaRecorder.onstop = async () => {
           try {
-            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
             const audioBase64 = await convertBlobToBase64(audioBlob);
             const url = URL.createObjectURL(audioBlob);
             
@@ -210,9 +220,10 @@ export default function VoiceNotesModal({
               duration: recordingDuration,
               timestamp: new Date().toISOString(),
               processed: false,
+              mimeType: 'audio/webm;codecs=opus',
             };
             
-            await transcribeAudio(voiceNote, audioBase64);
+            await transcribeAudio(voiceNote, audioBase64, 'audio/webm;codecs=opus');
             onVoiceNoteAdded(voiceNote);
             stream.getTracks().forEach(track => track.stop());
           } catch (error) {
@@ -296,9 +307,10 @@ export default function VoiceNotesModal({
                 duration: recordingDuration,
                 timestamp: new Date().toISOString(),
                 processed: false,
+                mimeType: 'audio/mp4',
               };
               
-              await transcribeAudio(voiceNote, audioBase64);
+              await transcribeAudio(voiceNote, audioBase64, 'audio/mp4');
               onVoiceNoteAdded(voiceNote);
             } catch (error) {
               console.error('Error processing native recorded audio:', error);
@@ -315,9 +327,9 @@ export default function VoiceNotesModal({
     }
   };
 
-  const transcribeAudio = async (voiceNote: VoiceNote, audioBase64: string) => {
+  const transcribeAudio = async (voiceNote: VoiceNote, audioBase64: string, mimeType: string) => {
     try {
-      console.log('Sending audio for transcription, base64 length:', audioBase64.length);
+      console.log('Sending audio for transcription, base64 length:', audioBase64.length, 'mimeType:', mimeType);
       
       const response = await fetch('/api/voice-to-pantry', {
         method: 'POST',
@@ -326,6 +338,7 @@ export default function VoiceNotesModal({
         },
         body: JSON.stringify({
           audioBase64: audioBase64,
+          mimeType: mimeType,
         }),
       });
 

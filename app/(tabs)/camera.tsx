@@ -64,6 +64,7 @@ export default function CameraScreen() {
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
   const [capturedMedia, setCapturedMedia] = useState<string[]>([]);
   const [voiceNotes, setVoiceNotes] = useState<VoiceNote[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [showCalorieModal, setShowCalorieModal] = useState(false);
   const [showVoiceModal, setShowVoiceModal] = useState(false);
@@ -78,7 +79,7 @@ export default function CameraScreen() {
   if (!cameraPermission) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Voice Notes\" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Voice Notes" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading permissions...</Text>
         </View>
@@ -113,6 +114,7 @@ export default function CameraScreen() {
     setCaptureMode(current => current === 'photo' ? 'multi-photo' : 'photo');
     // Clear captured media when switching modes
     setCapturedMedia([]);
+    setShowPreview(false);
   };
 
   const toggleFlashMode = () => {
@@ -137,6 +139,15 @@ export default function CameraScreen() {
       
       if (photo?.uri) {
         setCapturedMedia(prev => [...prev, photo.uri]);
+        
+        // For single photo mode, show preview immediately
+        if (captureMode === 'photo') {
+          setShowPreview(true);
+        }
+        // For multi-photo mode, show preview after first photo
+        else if (captureMode === 'multi-photo') {
+          setShowPreview(true);
+        }
       }
     } catch (error) {
       console.error('Error taking picture:', error);
@@ -153,9 +164,15 @@ export default function CameraScreen() {
   const retakePhotos = () => {
     setCapturedMedia([]);
     setVoiceNotes([]);
+    setShowPreview(false);
     setAnalysisResult(null);
     setCalorieResult(null);
     setAnalysisError(null);
+  };
+
+  const addMorePhotos = () => {
+    // Return to camera view while keeping existing photos
+    setShowPreview(false);
   };
 
   const convertImageToBase64 = async (imageUri: string): Promise<string> => {
@@ -298,7 +315,7 @@ export default function CameraScreen() {
   };
 
   // Multi-photo preview mode
-  if (capturedMedia.length > 0 && captureMode === 'multi-photo') {
+  if (showPreview && captureMode === 'multi-photo') {
     return (
       <ScreenContainer scrollable={false} style={styles.container}>
         <View style={styles.multiPhotoContainer}>
@@ -334,7 +351,7 @@ export default function CameraScreen() {
               ))}
               
               {/* Add more photos button */}
-              <TouchableOpacity style={styles.addMoreButton} onPress={() => setCapturedMedia([])}>
+              <TouchableOpacity style={styles.addMoreButton} onPress={addMorePhotos}>
                 <CameraIcon size={32} color={theme.colors.gray[600]} />
                 <Text style={styles.addMoreText}>Add More</Text>
               </TouchableOpacity>
@@ -406,7 +423,7 @@ export default function CameraScreen() {
   }
 
   // Single photo preview mode
-  if (capturedMedia.length > 0 && captureMode === 'photo') {
+  if (showPreview && captureMode === 'photo') {
     return (
       <ScreenContainer scrollable={false} style={styles.container}>
         <View style={styles.previewContainer}>
@@ -511,6 +528,9 @@ export default function CameraScreen() {
             <View style={styles.modeIndicator}>
               <Text style={styles.modeText}>
                 {captureMode.toUpperCase().replace('-', ' ')}
+                {capturedMedia.length > 0 && captureMode === 'multi-photo' && (
+                  <Text style={styles.photoCountText}> ({capturedMedia.length})</Text>
+                )}
               </Text>
             </View>
             
@@ -653,6 +673,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 14,
     color: 'white',
+  },
+  photoCountText: {
+    color: theme.colors.primary,
   },
   centerInfo: {
     flex: 1,

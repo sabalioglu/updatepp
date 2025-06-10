@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, Platform, Image } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, Platform, Image, ScrollView } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import ScreenContainer from '@/components/common/ScreenContainer';
@@ -8,7 +8,7 @@ import FoodAnalysisModal from '@/components/camera/FoodAnalysisModal';
 import CalorieCounterModal from '@/components/camera/CalorieCounterModal';
 import VoiceNotesModal from '@/components/camera/VoiceNotesModal';
 import { theme } from '@/constants/theme';
-import { Camera as CameraIcon, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator, Mic } from 'lucide-react-native';
+import { Camera as CameraIcon, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator, Mic, Trash2 } from 'lucide-react-native';
 import * as FileSystem from 'expo-file-system';
 
 type CaptureMode = 'photo' | 'multi-photo';
@@ -64,7 +64,6 @@ export default function CameraScreen() {
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
   const [capturedMedia, setCapturedMedia] = useState<string[]>([]);
   const [voiceNotes, setVoiceNotes] = useState<VoiceNote[]>([]);
-  const [mediaType, setMediaType] = useState<'photo' | 'multi-photo' | null>(null);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [showCalorieModal, setShowCalorieModal] = useState(false);
   const [showVoiceModal, setShowVoiceModal] = useState(false);
@@ -79,7 +78,7 @@ export default function CameraScreen() {
   if (!cameraPermission) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Voice Notes\" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Voice Notes" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading permissions...</Text>
         </View>
@@ -112,6 +111,8 @@ export default function CameraScreen() {
 
   const toggleCaptureMode = () => {
     setCaptureMode(current => current === 'photo' ? 'multi-photo' : 'photo');
+    // Clear captured media when switching modes
+    setCapturedMedia([]);
   };
 
   const toggleFlashMode = () => {
@@ -135,13 +136,7 @@ export default function CameraScreen() {
       });
       
       if (photo?.uri) {
-        if (captureMode === 'multi-photo') {
-          setCapturedMedia(prev => [...prev, photo.uri]);
-          setMediaType('multi-photo');
-        } else {
-          setCapturedMedia([photo.uri]);
-          setMediaType('photo');
-        }
+        setCapturedMedia(prev => [...prev, photo.uri]);
       }
     } catch (error) {
       console.error('Error taking picture:', error);
@@ -151,10 +146,13 @@ export default function CameraScreen() {
     }
   };
 
-  const retakeMedia = () => {
+  const removePhoto = (index: number) => {
+    setCapturedMedia(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const retakePhotos = () => {
     setCapturedMedia([]);
     setVoiceNotes([]);
-    setMediaType(null);
     setAnalysisResult(null);
     setCalorieResult(null);
     setAnalysisError(null);
@@ -162,7 +160,6 @@ export default function CameraScreen() {
 
   const convertImageToBase64 = async (imageUri: string): Promise<string> => {
     if (Platform.OS === 'web') {
-      // Web platform: use fetch and FileReader
       try {
         const response = await fetch(imageUri);
         const blob = await response.blob();
@@ -171,7 +168,6 @@ export default function CameraScreen() {
           const reader = new FileReader();
           reader.onloadend = () => {
             const base64String = reader.result as string;
-            // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
             const base64Data = base64String.split(',')[1];
             resolve(base64Data);
           };
@@ -182,7 +178,6 @@ export default function CameraScreen() {
         throw new Error('Failed to convert image to base64 on web platform');
       }
     } else {
-      // Native platform: use FileSystem
       return await FileSystem.readAsStringAsync(imageUri, {
         encoding: FileSystem.EncodingType.Base64,
       });
@@ -190,8 +185,8 @@ export default function CameraScreen() {
   };
 
   const analyzeFood = async () => {
-    if (capturedMedia.length === 0 || (mediaType !== 'photo' && mediaType !== 'multi-photo')) {
-      setAnalysisError('Only photos can be analyzed for food recognition');
+    if (capturedMedia.length === 0) {
+      setAnalysisError('No photos to analyze');
       return;
     }
 
@@ -200,10 +195,10 @@ export default function CameraScreen() {
     setShowAnalysisModal(true);
 
     try {
-      // Use the first image for analysis
+      // For multiple photos, we'll analyze the first one for now
+      // In a real implementation, you might want to combine all photos or analyze them separately
       const base64 = await convertImageToBase64(capturedMedia[0]);
 
-      // Call our API route
       const response = await fetch('/api/food-recognition', {
         method: 'POST',
         headers: {
@@ -211,6 +206,7 @@ export default function CameraScreen() {
         },
         body: JSON.stringify({
           imageBase64: base64,
+          photoCount: capturedMedia.length,
         }),
       });
 
@@ -230,8 +226,8 @@ export default function CameraScreen() {
   };
 
   const countCalories = async () => {
-    if (capturedMedia.length === 0 || (mediaType !== 'photo' && mediaType !== 'multi-photo')) {
-      setAnalysisError('Only photos can be analyzed for calorie counting');
+    if (capturedMedia.length === 0) {
+      setAnalysisError('No photos to analyze');
       return;
     }
 
@@ -240,10 +236,9 @@ export default function CameraScreen() {
     setShowCalorieModal(true);
 
     try {
-      // Use the first image for analysis
+      // For multiple photos, analyze the first one
       const base64 = await convertImageToBase64(capturedMedia[0]);
 
-      // Call our API route for calorie counting
       const response = await fetch('/api/calorie-counter', {
         method: 'POST',
         headers: {
@@ -251,6 +246,7 @@ export default function CameraScreen() {
         },
         body: JSON.stringify({
           imageBase64: base64,
+          photoCount: capturedMedia.length,
         }),
       });
 
@@ -281,13 +277,11 @@ export default function CameraScreen() {
     setVoiceNotes(prev => prev.filter(note => note.id !== voiceNoteId));
   };
 
-  const useMedia = () => {
-    // In a real app, you would save this media or pass it to another screen
-    // For now, we'll just show an alert and go back
+  const saveMedia = () => {
     if (Platform.OS !== 'web') {
       Alert.alert(
-        'Media Captured',
-        `Photo${mediaType === 'multi-photo' ? 's' : ''} and ${voiceNotes.length} voice note${voiceNotes.length !== 1 ? 's' : ''} saved successfully!`,
+        'Media Saved',
+        `${capturedMedia.length} photo${capturedMedia.length !== 1 ? 's' : ''} and ${voiceNotes.length} voice note${voiceNotes.length !== 1 ? 's' : ''} saved successfully!`,
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } else {
@@ -303,18 +297,121 @@ export default function CameraScreen() {
     }
   };
 
-  // Preview captured media
-  if (capturedMedia.length > 0) {
+  // Multi-photo preview mode
+  if (capturedMedia.length > 0 && captureMode === 'multi-photo') {
+    return (
+      <ScreenContainer scrollable={false} style={styles.container}>
+        <View style={styles.multiPhotoContainer}>
+          {/* Header */}
+          <View style={styles.multiPhotoHeader}>
+            <TouchableOpacity style={styles.headerButton} onPress={retakePhotos}>
+              <X size={24} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.multiPhotoTitle}>
+              {capturedMedia.length} Photo{capturedMedia.length !== 1 ? 's' : ''} Captured
+            </Text>
+            <TouchableOpacity style={styles.headerButton} onPress={saveMedia}>
+              <Check size={24} color="white" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Photo Grid */}
+          <ScrollView style={styles.photoGrid} showsVerticalScrollIndicator={false}>
+            <View style={styles.photoGridContent}>
+              {capturedMedia.map((uri, index) => (
+                <View key={index} style={styles.photoGridItem}>
+                  <Image source={{ uri }} style={styles.gridPhoto} />
+                  <TouchableOpacity
+                    style={styles.removePhotoButton}
+                    onPress={() => removePhoto(index)}
+                  >
+                    <Trash2 size={16} color="white" />
+                  </TouchableOpacity>
+                  <View style={styles.photoNumber}>
+                    <Text style={styles.photoNumberText}>{index + 1}</Text>
+                  </View>
+                </View>
+              ))}
+              
+              {/* Add more photos button */}
+              <TouchableOpacity style={styles.addMoreButton} onPress={() => setCapturedMedia([])}>
+                <CameraIcon size={32} color={theme.colors.gray[600]} />
+                <Text style={styles.addMoreText}>Add More</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+
+          {/* Action Buttons */}
+          <View style={styles.multiPhotoActions}>
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.analyzeButton]} 
+              onPress={analyzeFood}
+            >
+              <Sparkles size={20} color="white" />
+              <Text style={styles.actionButtonText}>Analyze All</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.calorieButton]} 
+              onPress={countCalories}
+            >
+              <Calculator size={20} color="white" />
+              <Text style={styles.actionButtonText}>Count Calories</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.voiceButton]} 
+              onPress={openVoiceNotes}
+            >
+              <Mic size={20} color="white" />
+              <Text style={styles.actionButtonText}>Voice Notes</Text>
+            </TouchableOpacity>
+          </View>
+
+          {voiceNotes.length > 0 && (
+            <View style={styles.voiceNotesIndicator}>
+              <Mic size={16} color={theme.colors.warning} />
+              <Text style={styles.voiceNotesText}>
+                {voiceNotes.length} voice note{voiceNotes.length !== 1 ? 's' : ''} recorded
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <FoodAnalysisModal
+          visible={showAnalysisModal}
+          onClose={() => setShowAnalysisModal(false)}
+          analysisResult={analysisResult}
+          loading={analysisLoading}
+          error={analysisError}
+        />
+
+        <CalorieCounterModal
+          visible={showCalorieModal}
+          onClose={() => setShowCalorieModal(false)}
+          analysisResult={calorieResult}
+          loading={analysisLoading}
+          error={analysisError}
+        />
+
+        <VoiceNotesModal
+          visible={showVoiceModal}
+          onClose={() => setShowVoiceModal(false)}
+          voiceNotes={voiceNotes}
+          onVoiceNoteAdded={handleVoiceNoteAdded}
+          onVoiceNoteDeleted={handleVoiceNoteDeleted}
+        />
+      </ScreenContainer>
+    );
+  }
+
+  // Single photo preview mode
+  if (capturedMedia.length > 0 && captureMode === 'photo') {
     return (
       <ScreenContainer scrollable={false} style={styles.container}>
         <View style={styles.previewContainer}>
           <View style={styles.photoPreviewContainer}>
             <Image source={{ uri: capturedMedia[0] }} style={styles.previewMedia} />
-            {mediaType === 'multi-photo' && capturedMedia.length > 1 && (
-              <View style={styles.photoCounter}>
-                <Text style={styles.photoCounterText}>{capturedMedia.length} photos</Text>
-              </View>
-            )}
             {voiceNotes.length > 0 && (
               <View style={styles.voiceCounter}>
                 <Mic size={16} color="white" />
@@ -324,7 +421,7 @@ export default function CameraScreen() {
           </View>
           
           <View style={styles.previewActions}>
-            <TouchableOpacity style={styles.previewActionButton} onPress={retakeMedia}>
+            <TouchableOpacity style={styles.previewActionButton} onPress={retakePhotos}>
               <X size={18} color="white" />
               <Text style={styles.previewActionText}>Retake</Text>
             </TouchableOpacity>
@@ -355,7 +452,7 @@ export default function CameraScreen() {
             
             <TouchableOpacity 
               style={[styles.previewActionButton, styles.useButton]} 
-              onPress={useMedia}
+              onPress={saveMedia}
             >
               <Check size={18} color="white" />
               <Text style={styles.previewActionText}>Save</Text>
@@ -390,6 +487,7 @@ export default function CameraScreen() {
     );
   }
 
+  // Camera view
   return (
     <ScreenContainer scrollable={false} style={styles.container}>
       <Header title="Camera & Voice Notes" showBack onBackPress={() => router.back()} />
@@ -647,6 +745,124 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minWidth: 60,
   },
+  // Multi-photo styles
+  multiPhotoContainer: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
+  multiPhotoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    paddingTop: 50,
+  },
+  headerButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: theme.borderRadius.round,
+    padding: theme.spacing.sm,
+  },
+  multiPhotoTitle: {
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 18,
+    color: 'white',
+  },
+  photoGrid: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.md,
+  },
+  photoGridContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.xl,
+  },
+  photoGridItem: {
+    width: '48%',
+    aspectRatio: 1,
+    position: 'relative',
+  },
+  gridPhoto: {
+    width: '100%',
+    height: '100%',
+    borderRadius: theme.borderRadius.md,
+  },
+  removePhotoButton: {
+    position: 'absolute',
+    top: theme.spacing.xs,
+    right: theme.spacing.xs,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: theme.borderRadius.round,
+    padding: theme.spacing.xs,
+  },
+  photoNumber: {
+    position: 'absolute',
+    bottom: theme.spacing.xs,
+    left: theme.spacing.xs,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: theme.borderRadius.round,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoNumberText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 12,
+    color: 'white',
+  },
+  addMoreButton: {
+    width: '48%',
+    aspectRatio: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addMoreText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginTop: theme.spacing.xs,
+  },
+  multiPhotoActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.lg,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    gap: theme.spacing.xs,
+  },
+  actionButtonText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: 'white',
+  },
+  voiceNotesIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.sm,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    gap: theme.spacing.xs,
+  },
+  voiceNotesText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: theme.colors.warning,
+  },
+  // Single photo preview styles
   previewContainer: {
     flex: 1,
     backgroundColor: 'black',
@@ -658,20 +874,6 @@ const styles = StyleSheet.create({
   previewMedia: {
     flex: 1,
     width: '100%',
-  },
-  photoCounter: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-  },
-  photoCounterText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 12,
-    color: 'white',
   },
   voiceCounter: {
     position: 'absolute',

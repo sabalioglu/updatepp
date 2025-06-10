@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal, Alert, Pla
 import { usePantryItems } from '@/hooks/usePantryItems';
 import { theme } from '@/constants/theme';
 import { X, Mic, Square, Play, Pause, Trash2, Clock, FileAudio, Plus, Sparkles, Check, MessageSquare } from 'lucide-react-native';
-import { PantryItem } from '@/types';
+import { PantryItem, FoodCategory } from '@/types';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 
@@ -53,6 +53,7 @@ export default function VoiceNotesModal({
   const [processingNoteId, setProcessingNoteId] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<PantryAnalysisResult | null>(null);
   const [showAnalysisResult, setShowAnalysisResult] = useState(false);
+  const [addingToPantry, setAddingToPantry] = useState(false);
   
   const { addItem } = usePantryItems();
   
@@ -427,41 +428,90 @@ export default function VoiceNotesModal({
     }
   };
 
+  const mapCategoryToFoodCategory = (category: string): FoodCategory => {
+    const categoryMap: { [key: string]: FoodCategory } = {
+      'fruits': 'fruits',
+      'vegetables': 'vegetables',
+      'dairy': 'dairy',
+      'meat': 'meat',
+      'seafood': 'seafood',
+      'grains': 'grains',
+      'canned': 'canned',
+      'frozen': 'frozen',
+      'spices': 'spices',
+      'condiments': 'condiments',
+      'baking': 'baking',
+      'snacks': 'snacks',
+      'beverages': 'beverages',
+    };
+    
+    return categoryMap[category.toLowerCase()] || 'other';
+  };
+
   const addItemsToPantry = async () => {
     if (!analysisResult?.pantryItems || !Array.isArray(analysisResult.pantryItems)) {
       Alert.alert('Error', 'No pantry items to add.');
       return;
     }
 
+    setAddingToPantry(true);
+
     try {
       const today = new Date();
+      let addedCount = 0;
       
       for (const item of analysisResult.pantryItems) {
-        const expiryDate = new Date(today);
-        expiryDate.setDate(today.getDate() + item.estimatedExpiryDays);
-        
-        const pantryItem: PantryItem = {
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-          name: item.name,
-          category: item.category,
-          quantity: item.quantity,
-          unit: item.unit,
-          purchaseDate: today.toISOString().split('T')[0],
-          expiryDate: expiryDate.toISOString().split('T')[0],
-          notes: item.notes,
-        };
-        
-        await addItem(pantryItem);
+        try {
+          const expiryDate = new Date(today);
+          expiryDate.setDate(today.getDate() + item.estimatedExpiryDays);
+          
+          const pantryItem: PantryItem = {
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            name: item.name,
+            category: mapCategoryToFoodCategory(item.category),
+            quantity: item.quantity,
+            unit: item.unit,
+            purchaseDate: today.toISOString().split('T')[0],
+            expiryDate: expiryDate.toISOString().split('T')[0],
+            notes: item.notes || 'Added from voice note',
+          };
+          
+          console.log('Adding pantry item:', pantryItem);
+          await addItem(pantryItem);
+          addedCount++;
+        } catch (itemError) {
+          console.error('Error adding individual item:', item.name, itemError);
+        }
       }
 
-      Alert.alert(
-        'Success!', 
-        `Added ${analysisResult.pantryItems.length} items to your pantry from voice note.`,
-        [{ text: 'OK', onPress: () => setShowAnalysisResult(false) }]
-      );
+      if (addedCount > 0) {
+        // Mark the voice note as processed
+        const updatedVoiceNotes = voiceNotes.map(note => {
+          if (note.transcription === analysisResult.transcription) {
+            return { ...note, processed: true };
+          }
+          return note;
+        });
+
+        Alert.alert(
+          'Success!', 
+          `Added ${addedCount} item${addedCount !== 1 ? 's' : ''} to your pantry from voice note.`,
+          [{ 
+            text: 'OK', 
+            onPress: () => {
+              setShowAnalysisResult(false);
+              setAnalysisResult(null);
+            }
+          }]
+        );
+      } else {
+        Alert.alert('Error', 'Failed to add any items to pantry. Please try again.');
+      }
     } catch (error) {
       console.error('Error adding items to pantry:', error);
       Alert.alert('Error', 'Failed to add items to pantry. Please try again.');
+    } finally {
+      setAddingToPantry(false);
     }
   };
 
@@ -743,9 +793,18 @@ export default function VoiceNotesModal({
 
                   {/* Add to Pantry Button */}
                   {Array.isArray(analysisResult.pantryItems) && analysisResult.pantryItems.length > 0 && (
-                    <TouchableOpacity style={styles.addToPantryButton} onPress={addItemsToPantry}>
+                    <TouchableOpacity 
+                      style={[
+                        styles.addToPantryButton,
+                        addingToPantry && styles.addToPantryButtonDisabled
+                      ]} 
+                      onPress={addItemsToPantry}
+                      disabled={addingToPantry}
+                    >
                       <Plus size={20} color="white" />
-                      <Text style={styles.addToPantryText}>Add to Pantry</Text>
+                      <Text style={styles.addToPantryText}>
+                        {addingToPantry ? 'Adding to Pantry...' : 'Add to Pantry'}
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </ScrollView>
@@ -1137,6 +1196,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: theme.spacing.xs,
     ...theme.shadows.md,
+  },
+  addToPantryButtonDisabled: {
+    backgroundColor: theme.colors.gray[400],
   },
   addToPantryText: {
     fontFamily: 'Inter-SemiBold',

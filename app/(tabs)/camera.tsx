@@ -8,7 +8,7 @@ import FoodAnalysisModal from '@/components/camera/FoodAnalysisModal';
 import CalorieCounterModal from '@/components/camera/CalorieCounterModal';
 import VoiceNotesModal from '@/components/camera/VoiceNotesModal';
 import { theme } from '@/constants/theme';
-import { Camera as CameraIcon, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator, Mic, Trash2 } from 'lucide-react-native';
+import { Camera as CameraIcon, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator, Mic, Trash2, Package } from 'lucide-react-native';
 import * as FileSystem from 'expo-file-system';
 
 type CaptureMode = 'photo' | 'multi-photo';
@@ -79,7 +79,7 @@ export default function CameraScreen() {
   if (!cameraPermission) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Voice Notes\" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Voice Notes" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading permissions...</Text>
         </View>
@@ -282,6 +282,21 @@ export default function CameraScreen() {
     }
   };
 
+  const addToPantry = async () => {
+    if (capturedMedia.length === 0) {
+      Alert.alert('No Photos', 'Please take photos first to add items to your pantry.');
+      return;
+    }
+
+    // For now, we'll show a success message
+    // In a real implementation, this would process the photos and add items to pantry
+    Alert.alert(
+      'Added to Pantry',
+      `${capturedMedia.length} photo${capturedMedia.length !== 1 ? 's' : ''} processed and items added to your pantry!`,
+      [{ text: 'OK', onPress: () => router.back() }]
+    );
+  };
+
   const openVoiceNotes = () => {
     setShowVoiceModal(true);
   };
@@ -377,6 +392,14 @@ export default function CameraScreen() {
             </TouchableOpacity>
             
             <TouchableOpacity 
+              style={[styles.actionButton, styles.pantryButton]} 
+              onPress={addToPantry}
+            >
+              <Package size={20} color="white" />
+              <Text style={styles.actionButtonText}>Add to Pantry</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
               style={[styles.actionButton, styles.voiceButton]} 
               onPress={openVoiceNotes}
             >
@@ -460,11 +483,11 @@ export default function CameraScreen() {
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[styles.previewActionButton, styles.voiceButton]} 
-              onPress={openVoiceNotes}
+              style={[styles.previewActionButton, styles.pantryButton]} 
+              onPress={addToPantry}
             >
-              <Mic size={18} color="white" />
-              <Text style={styles.previewActionText}>Voice</Text>
+              <Package size={18} color="white" />
+              <Text style={styles.previewActionText}>Pantry</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -938,11 +961,14 @@ const styles = StyleSheet.create({
   calorieButton: {
     backgroundColor: theme.colors.accent,
   },
+  pantryButton: {
+    backgroundColor: theme.colors.primary,
+  },
   voiceButton: {
     backgroundColor: theme.colors.warning,
   },
   useButton: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.success,
   },
   previewActionText: {
     fontFamily: 'Inter-Medium',

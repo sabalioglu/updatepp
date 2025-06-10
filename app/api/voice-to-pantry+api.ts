@@ -34,6 +34,13 @@ export async function POST(request: Request) {
         // Use the provided mimeType or fallback to audio/mp4 for better compatibility
         const audioMimeType = mimeType || 'audio/mp4';
         
+        console.log('🎤 Gemini Transcription Request:', {
+          mimeType: audioMimeType,
+          audioBase64Length: audioBase64.length,
+          apiKeyPresent: !!apiKey,
+          timestamp: new Date().toISOString()
+        });
+        
         const transcriptionResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: {
@@ -62,26 +69,62 @@ export async function POST(request: Request) {
           }),
         });
 
+        console.log('🎤 Gemini Transcription Response Status:', transcriptionResponse.status);
+
         if (!transcriptionResponse.ok) {
-          const errorData = await transcriptionResponse.text();
-          console.error('Gemini transcription API error:', errorData);
-          return new Response(
-            JSON.stringify({ 
+          const rawError = await transcriptionResponse.text();
+          console.log("❌ Gemini Transcription API Raw Error:", rawError);
+
+          try {
+            const parsed = JSON.parse(rawError);
+            console.log("🧠 Gemini Transcription JSON Error:", parsed);
+            
+            // Log specific error details for iOS debugging
+            if (parsed.error) {
+              console.log("🔍 Detailed Error Analysis:", {
+                code: parsed.error.code,
+                message: parsed.error.message,
+                status: parsed.error.status,
+                details: parsed.error.details || 'No additional details',
+                mimeTypeUsed: audioMimeType,
+                audioSize: audioBase64.length,
+                platform: 'API Route'
+              });
+            }
+          } catch (e) {
+            console.log("⚠️ Gemini transcription response was not valid JSON.");
+            console.log("📄 Raw error content:", rawError.substring(0, 500));
+          }
+
+          return {
+            statusCode: transcriptionResponse.status,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            },
+            body: JSON.stringify({ 
               error: 'Failed to transcribe audio',
               transcription: null,
-              pantryItems: []
+              pantryItems: [],
+              debugInfo: {
+                mimeType: audioMimeType,
+                audioSize: audioBase64.length,
+                httpStatus: transcriptionResponse.status
+              }
             }),
-            {
-              status: transcriptionResponse.status,
-              headers: { 'Content-Type': 'application/json' },
-            }
-          );
+          };
         }
 
         const transcriptionData = await transcriptionResponse.json();
         finalTranscription = transcriptionData.candidates?.[0]?.content?.parts?.[0]?.text;
 
+        console.log('✅ Transcription Success:', {
+          transcriptionLength: finalTranscription?.length || 0,
+          hasContent: !!finalTranscription
+        });
+
         if (!finalTranscription) {
+          console.log('❌ No transcription content received from Gemini');
           return new Response(
             JSON.stringify({ 
               error: 'No transcription received from AI',
@@ -96,13 +139,24 @@ export async function POST(request: Request) {
         }
 
         finalTranscription = finalTranscription.trim();
+        console.log('📝 Final Transcription:', finalTranscription);
       } catch (transcriptionError) {
-        console.error('Transcription error:', transcriptionError);
+        console.error('💥 Transcription Request Error:', transcriptionError);
+        console.error('🔧 Error Details:', {
+          name: transcriptionError.name,
+          message: transcriptionError.message,
+          stack: transcriptionError.stack?.substring(0, 500)
+        });
+        
         return new Response(
           JSON.stringify({ 
             error: 'Failed to transcribe audio',
             transcription: null,
-            pantryItems: []
+            pantryItems: [],
+            debugInfo: {
+              errorType: transcriptionError.name,
+              errorMessage: transcriptionError.message
+            }
           }),
           {
             status: 500,
@@ -161,6 +215,8 @@ Voice transcription to analyze: "${finalTranscription}"`;
     let extractionError = null;
 
     try {
+      console.log('🔍 Starting pantry item extraction...');
+      
       const extractionResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: {
@@ -183,6 +239,8 @@ Voice transcription to analyze: "${finalTranscription}"`;
         }),
       });
 
+      console.log('🔍 Gemini Extraction Response Status:', extractionResponse.status);
+
       if (extractionResponse.ok) {
         try {
           const extractionData = await extractionResponse.json();
@@ -195,18 +253,36 @@ Voice transcription to analyze: "${finalTranscription}"`;
             pantryItems = Array.isArray(parsedResponse.pantryItems) ? parsedResponse.pantryItems : [];
             summary = parsedResponse.summary || 'Items extracted from voice note';
             suggestions = Array.isArray(parsedResponse.suggestions) ? parsedResponse.suggestions : [];
+            
+            console.log('✅ Extraction Success:', {
+              itemsFound: pantryItems.length,
+              summary: summary
+            });
           }
         } catch (parseError) {
-          console.error('Error parsing extraction response:', parseError);
+          console.error('💥 Error parsing extraction response:', parseError);
           extractionError = 'Failed to parse pantry items from transcription';
         }
       } else {
-        const errorData = await extractionResponse.text();
-        console.error('Gemini extraction API error:', errorData);
+        const rawError = await extractionResponse.text();
+        console.log("❌ Gemini Extraction API Raw Error:", rawError);
+
+        try {
+          const parsed = JSON.parse(rawError);
+          console.log("🧠 Gemini Extraction JSON Error:", parsed);
+        } catch (e) {
+          console.log("⚠️ Gemini extraction response was not valid JSON.");
+          console.log("📄 Raw error content:", rawError.substring(0, 500));
+        }
+
         extractionError = 'Failed to extract pantry items from transcription';
       }
     } catch (extractionRequestError) {
-      console.error('Extraction request error:', extractionRequestError);
+      console.error('💥 Extraction request error:', extractionRequestError);
+      console.error('🔧 Error Details:', {
+        name: extractionRequestError.name,
+        message: extractionRequestError.message
+      });
       extractionError = 'Failed to extract pantry items from transcription';
     }
 
@@ -223,6 +299,12 @@ Voice transcription to analyze: "${finalTranscription}"`;
       response.error = extractionError;
     }
 
+    console.log('📤 Final API Response:', {
+      hasTranscription: !!response.transcription,
+      itemCount: response.pantryItems.length,
+      hasError: !!response.error
+    });
+
     return new Response(
       JSON.stringify(response),
       {
@@ -232,12 +314,22 @@ Voice transcription to analyze: "${finalTranscription}"`;
     );
 
   } catch (error) {
-    console.error('Voice to pantry API error:', error);
+    console.error('💥 Voice to pantry API error:', error);
+    console.error('🔧 Error Details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack?.substring(0, 500)
+    });
+    
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error',
         transcription: null,
-        pantryItems: []
+        pantryItems: [],
+        debugInfo: {
+          errorType: error.name,
+          errorMessage: error.message
+        }
       }),
       {
         status: 500,

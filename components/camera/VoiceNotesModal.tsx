@@ -111,14 +111,16 @@ export default function VoiceNotesModal({
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach(track => track.stop());
         setRecordingPermission(true);
+        console.log('VoiceNotesModal: Web audio permission granted');
       } catch (error) {
-        console.error('Permission check error:', error);
+        console.error('VoiceNotesModal: Web permission check error:', error);
         setRecordingPermission(false);
       }
     } else {
       try {
         const { status } = await Audio.requestPermissionsAsync();
         setRecordingPermission(status === 'granted');
+        console.log('VoiceNotesModal: Native audio permission:', status);
         
         if (status === 'granted') {
           await Audio.setAudioModeAsync({
@@ -127,7 +129,7 @@ export default function VoiceNotesModal({
           });
         }
       } catch (error) {
-        console.error('Permission check error:', error);
+        console.error('VoiceNotesModal: Native permission check error:', error);
         setRecordingPermission(false);
       }
     }
@@ -174,6 +176,7 @@ export default function VoiceNotesModal({
     }
 
     try {
+      console.log('VoiceNotesModal: Starting recording on', Platform.OS);
       setIsRecording(true);
       setRecordingDuration(0);
       
@@ -211,8 +214,8 @@ export default function VoiceNotesModal({
             const audioBase64 = await convertBlobToBase64(audioBlob);
             const url = URL.createObjectURL(audioBlob);
             
-            console.log('Web audio recorded, size:', audioBlob.size, 'bytes');
-            console.log('Base64 length:', audioBase64.length);
+            console.log('VoiceNotesModal: Web audio recorded, size:', audioBlob.size, 'bytes');
+            console.log('VoiceNotesModal: Base64 length:', audioBase64.length);
             
             const voiceNote: VoiceNote = {
               id: Date.now().toString(),
@@ -227,7 +230,7 @@ export default function VoiceNotesModal({
             onVoiceNoteAdded(voiceNote);
             stream.getTracks().forEach(track => track.stop());
           } catch (error) {
-            console.error('Error processing web recorded audio:', error);
+            console.error('VoiceNotesModal: Error processing web recorded audio:', error);
             Alert.alert('Error', 'Failed to process recorded audio.');
           }
         };
@@ -264,10 +267,10 @@ export default function VoiceNotesModal({
         
         recordingRef.current = recording;
         await recording.startAsync();
-        console.log('Native recording started');
+        console.log('VoiceNotesModal: Native recording started');
       }
     } catch (error) {
-      console.error('Error starting recording:', error);
+      console.error('VoiceNotesModal: Error starting recording:', error);
       Alert.alert('Error', 'Failed to start recording. Please try again.');
       setIsRecording(false);
       if (durationInterval.current) {
@@ -278,6 +281,7 @@ export default function VoiceNotesModal({
 
   const stopRecording = async () => {
     try {
+      console.log('VoiceNotesModal: Stopping recording');
       setIsRecording(false);
       
       if (durationInterval.current) {
@@ -295,11 +299,11 @@ export default function VoiceNotesModal({
           const uri = recordingRef.current.getURI();
           
           if (uri) {
-            console.log('Native recording stopped, URI:', uri);
+            console.log('VoiceNotesModal: Native recording stopped, URI:', uri);
             
             try {
               const audioBase64 = await convertFileToBase64(uri);
-              console.log('Native audio base64 length:', audioBase64.length);
+              console.log('VoiceNotesModal: Native audio base64 length:', audioBase64.length);
               
               const voiceNote: VoiceNote = {
                 id: Date.now().toString(),
@@ -313,7 +317,7 @@ export default function VoiceNotesModal({
               await transcribeAudio(voiceNote, audioBase64, 'audio/mp4');
               onVoiceNoteAdded(voiceNote);
             } catch (error) {
-              console.error('Error processing native recorded audio:', error);
+              console.error('VoiceNotesModal: Error processing native recorded audio:', error);
               Alert.alert('Error', 'Failed to process recorded audio.');
             }
           }
@@ -322,14 +326,14 @@ export default function VoiceNotesModal({
         }
       }
     } catch (error) {
-      console.error('Error stopping recording:', error);
+      console.error('VoiceNotesModal: Error stopping recording:', error);
       Alert.alert('Error', 'Failed to stop recording.');
     }
   };
 
   const transcribeAudio = async (voiceNote: VoiceNote, audioBase64: string, mimeType: string) => {
     try {
-      console.log('Sending audio for transcription, base64 length:', audioBase64.length, 'mimeType:', mimeType);
+      console.log('VoiceNotesModal: Sending audio for transcription, base64 length:', audioBase64.length, 'mimeType:', mimeType);
       
       const response = await fetch('/api/voice-to-pantry', {
         method: 'POST',
@@ -344,17 +348,17 @@ export default function VoiceNotesModal({
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('Transcription API error:', errorData);
+        console.error('VoiceNotesModal: Transcription API error:', errorData);
         throw new Error(errorData.error || 'Failed to transcribe audio');
       }
 
       const result = await response.json();
-      console.log('Transcription result:', result);
+      console.log('VoiceNotesModal: Transcription result:', result);
       
       voiceNote.transcription = result.transcription;
       
     } catch (error) {
-      console.error('Transcription error:', error);
+      console.error('VoiceNotesModal: Transcription error:', error);
       voiceNote.transcription = 'Failed to transcribe audio';
     }
   };
@@ -397,7 +401,7 @@ export default function VoiceNotesModal({
         });
       }
     } catch (error) {
-      console.error('Error playing voice note:', error);
+      console.error('VoiceNotesModal: Error playing voice note:', error);
       Alert.alert('Error', 'Failed to play voice note.');
       setPlayingNoteId(null);
     }
@@ -409,12 +413,11 @@ export default function VoiceNotesModal({
       return;
     }
 
+    console.log('VoiceNotesModal: Processing voice note with transcription:', voiceNote.transcription);
     setProcessingNoteId(voiceNote.id);
     setAnalysisResult(null);
 
     try {
-      console.log('Processing transcription:', voiceNote.transcription);
-      
       const response = await fetch('/api/voice-to-pantry', {
         method: 'POST',
         headers: {
@@ -431,11 +434,11 @@ export default function VoiceNotesModal({
       }
 
       const result = await response.json();
-      console.log('Processing result:', result);
+      console.log('VoiceNotesModal: Processing result:', result);
       setAnalysisResult(result);
       setShowAnalysisResult(true);
     } catch (error) {
-      console.error('Voice processing error:', error);
+      console.error('VoiceNotesModal: Voice processing error:', error);
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to process voice note');
     } finally {
       setProcessingNoteId(null);
@@ -468,6 +471,7 @@ export default function VoiceNotesModal({
       return;
     }
 
+    console.log('VoiceNotesModal: Adding items to pantry:', analysisResult.pantryItems);
     setAddingToPantry(true);
 
     try {
@@ -494,22 +498,17 @@ export default function VoiceNotesModal({
             image: image,
           };
           
-          console.log('Adding pantry item:', pantryItem);
+          console.log('VoiceNotesModal: Adding pantry item:', pantryItem);
           await addItem(pantryItem);
           addedCount++;
+          console.log('VoiceNotesModal: Successfully added item:', item.name);
         } catch (itemError) {
-          console.error('Error adding individual item:', item.name, itemError);
+          console.error('VoiceNotesModal: Error adding individual item:', item.name, itemError);
         }
       }
 
       if (addedCount > 0) {
-        // Mark the voice note as processed
-        const updatedVoiceNotes = voiceNotes.map(note => {
-          if (note.transcription === analysisResult.transcription) {
-            return { ...note, processed: true };
-          }
-          return note;
-        });
+        console.log('VoiceNotesModal: Successfully added', addedCount, 'items to pantry');
 
         Alert.alert(
           'Success!', 
@@ -523,10 +522,11 @@ export default function VoiceNotesModal({
           }]
         );
       } else {
+        console.error('VoiceNotesModal: Failed to add any items to pantry');
         Alert.alert('Error', 'Failed to add any items to pantry. Please try again.');
       }
     } catch (error) {
-      console.error('Error adding items to pantry:', error);
+      console.error('VoiceNotesModal: Error adding items to pantry:', error);
       Alert.alert('Error', 'Failed to add items to pantry. Please try again.');
     } finally {
       setAddingToPantry(false);

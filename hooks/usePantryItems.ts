@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PantryItem } from '@/types';
 import { getPantryItems, savePantryItem, deletePantryItem, initializeStorage } from '@/utils/storage';
+import { getFoodImage } from '@/utils/foodImages';
 
 export function usePantryItems() {
   const [items, setItems] = useState<PantryItem[]>([]);
@@ -27,6 +28,11 @@ export function usePantryItems() {
 
   const addItem = useCallback(async (item: PantryItem) => {
     try {
+      // Ensure the item has an image
+      if (!item.image) {
+        item.image = getFoodImage(item.name, item.category);
+      }
+      
       await savePantryItem(item);
       await fetchItems(); // Refresh the list
     } catch (err) {
@@ -36,6 +42,11 @@ export function usePantryItems() {
 
   const updateItem = useCallback(async (item: PantryItem) => {
     try {
+      // Ensure the item has an image
+      if (!item.image) {
+        item.image = getFoodImage(item.name, item.category);
+      }
+      
       await savePantryItem(item);
       await fetchItems(); // Refresh the list
     } catch (err) {

@@ -6,6 +6,7 @@ import { X, Mic, Square, Play, Pause, Trash2, Clock, FileAudio, Plus, Sparkles, 
 import { PantryItem, FoodCategory } from '@/types';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
+import { getFoodImage } from '@/utils/foodImages';
 
 interface VoiceNote {
   id: string;
@@ -465,15 +466,19 @@ export default function VoiceNotesModal({
           const expiryDate = new Date(today);
           expiryDate.setDate(today.getDate() + item.estimatedExpiryDays);
           
+          const category = mapCategoryToFoodCategory(item.category);
+          const image = getFoodImage(item.name, category);
+          
           const pantryItem: PantryItem = {
             id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
             name: item.name,
-            category: mapCategoryToFoodCategory(item.category),
+            category: category,
             quantity: item.quantity,
             unit: item.unit,
             purchaseDate: today.toISOString().split('T')[0],
             expiryDate: expiryDate.toISOString().split('T')[0],
             notes: item.notes || 'Added from voice note',
+            image: image,
           };
           
           console.log('Adding pantry item:', pantryItem);

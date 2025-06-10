@@ -4,6 +4,8 @@ import { usePantryItems } from '@/hooks/usePantryItems';
 import { theme } from '@/constants/theme';
 import { X, Mic, Square, Play, Pause, Trash2, Clock, FileAudio, Plus, Sparkles, Check, MessageSquare } from 'lucide-react-native';
 import { PantryItem } from '@/types';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 
 interface VoiceNote {
   id: string;
@@ -53,25 +55,52 @@ export default function VoiceNotesModal({
   const [showAnalysisResult, setShowAnalysisResult] = useState(false);
   
   const { addItem } = usePantryItems();
+  
+  // Native recording refs
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  
+  // Web recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const soundRef = useRef<any>(null);
   const durationInterval = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     checkPermissions();
     return () => {
-      if (durationInterval.current) {
-        clearInterval(durationInterval.current);
-      }
+      cleanup();
+    };
+  }, []);
+
+  const cleanup = async () => {
+    if (durationInterval.current) {
+      clearInterval(durationInterval.current);
+    }
+    
+    if (Platform.OS === 'web') {
       if (soundRef.current) {
-        soundRef.current.unloadAsync();
+        await soundRef.current.unloadAsync();
       }
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
       }
-    };
-  }, []);
+    } else {
+      if (recordingRef.current) {
+        try {
+          await recordingRef.current.stopAndUnloadAsync();
+        } catch (error) {
+          console.log('Error stopping recording:', error);
+        }
+      }
+      if (soundRef.current) {
+        try {
+          await soundRef.current.unloadAsync();
+        } catch (error) {
+          console.log('Error unloading sound:', error);
+        }
+      }
+    }
+  };
 
   const checkPermissions = async () => {
     if (Platform.OS === 'web') {
@@ -84,7 +113,20 @@ export default function VoiceNotesModal({
         setRecordingPermission(false);
       }
     } else {
-      setRecordingPermission(true);
+      try {
+        const { status } = await Audio.requestPermissionsAsync();
+        setRecordingPermission(status === 'granted');
+        
+        if (status === 'granted') {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: true,
+            playsInSilentModeIOS: true,
+          });
+        }
+      } catch (error) {
+        console.error('Permission check error:', error);
+        setRecordingPermission(false);
+      }
     }
   };
 
@@ -93,13 +135,24 @@ export default function VoiceNotesModal({
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64String = reader.result as string;
-        // Remove the data URL prefix (e.g., "data:audio/wav;base64,")
         const base64Data = base64String.split(',')[1];
         resolve(base64Data);
       };
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
+  };
+
+  const convertFileToBase64 = async (uri: string): Promise<string> => {
+    if (Platform.OS === 'web') {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      return convertBlobToBase64(blob);
+    } else {
+      return await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+    }
   };
 
   const startRecording = async () => {
@@ -111,13 +164,14 @@ export default function VoiceNotesModal({
     try {
       setIsRecording(true);
       setRecordingDuration(0);
-      audioChunksRef.current = [];
       
       durationInterval.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
       }, 1000);
 
       if (Platform.OS === 'web') {
+        audioChunksRef.current = [];
+        
         const stream = await navigator.mediaDevices.getUserMedia({ 
           audio: {
             sampleRate: 16000,
@@ -145,7 +199,7 @@ export default function VoiceNotesModal({
             const audioBase64 = await convertBlobToBase64(audioBlob);
             const url = URL.createObjectURL(audioBlob);
             
-            console.log('Audio recorded, size:', audioBlob.size, 'bytes');
+            console.log('Web audio recorded, size:', audioBlob.size, 'bytes');
             console.log('Base64 length:', audioBase64.length);
             
             const voiceNote: VoiceNote = {
@@ -156,25 +210,48 @@ export default function VoiceNotesModal({
               processed: false,
             };
             
-            // Immediately transcribe the audio
             await transcribeAudio(voiceNote, audioBase64);
-            
             onVoiceNoteAdded(voiceNote);
             stream.getTracks().forEach(track => track.stop());
           } catch (error) {
-            console.error('Error processing recorded audio:', error);
+            console.error('Error processing web recorded audio:', error);
             Alert.alert('Error', 'Failed to process recorded audio.');
           }
         };
 
-        mediaRecorder.start(1000); // Collect data every second
+        mediaRecorder.start(1000);
       } else {
-        // For native platforms, we'll simulate recording for now
-        Alert.alert('Recording', 'Voice recording is not yet implemented for native platforms.');
-        setIsRecording(false);
-        if (durationInterval.current) {
-          clearInterval(durationInterval.current);
-        }
+        // Native recording
+        const recording = new Audio.Recording();
+        await recording.prepareToRecordAsync({
+          android: {
+            extension: '.m4a',
+            outputFormat: Audio.RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
+            audioEncoder: Audio.RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
+            sampleRate: 16000,
+            numberOfChannels: 1,
+            bitRate: 128000,
+          },
+          ios: {
+            extension: '.m4a',
+            outputFormat: Audio.RECORDING_OPTION_IOS_OUTPUT_FORMAT_MPEG4AAC,
+            audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_HIGH,
+            sampleRate: 16000,
+            numberOfChannels: 1,
+            bitRate: 128000,
+            linearPCMBitDepth: 16,
+            linearPCMIsBigEndian: false,
+            linearPCMIsFloat: false,
+          },
+          web: {
+            mimeType: 'audio/webm;codecs=opus',
+            bitsPerSecond: 128000,
+          },
+        });
+        
+        recordingRef.current = recording;
+        await recording.startAsync();
+        console.log('Native recording started');
       }
     } catch (error) {
       console.error('Error starting recording:', error);
@@ -194,9 +271,40 @@ export default function VoiceNotesModal({
         clearInterval(durationInterval.current);
       }
 
-      if (Platform.OS === 'web' && mediaRecorderRef.current) {
-        if (mediaRecorderRef.current.state !== 'inactive') {
+      if (Platform.OS === 'web') {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
           mediaRecorderRef.current.stop();
+        }
+      } else {
+        // Native recording
+        if (recordingRef.current) {
+          await recordingRef.current.stopAndUnloadAsync();
+          const uri = recordingRef.current.getURI();
+          
+          if (uri) {
+            console.log('Native recording stopped, URI:', uri);
+            
+            try {
+              const audioBase64 = await convertFileToBase64(uri);
+              console.log('Native audio base64 length:', audioBase64.length);
+              
+              const voiceNote: VoiceNote = {
+                id: Date.now().toString(),
+                uri: uri,
+                duration: recordingDuration,
+                timestamp: new Date().toISOString(),
+                processed: false,
+              };
+              
+              await transcribeAudio(voiceNote, audioBase64);
+              onVoiceNoteAdded(voiceNote);
+            } catch (error) {
+              console.error('Error processing native recorded audio:', error);
+              Alert.alert('Error', 'Failed to process recorded audio.');
+            }
+          }
+          
+          recordingRef.current = null;
         }
       }
     } catch (error) {
@@ -228,7 +336,6 @@ export default function VoiceNotesModal({
       const result = await response.json();
       console.log('Transcription result:', result);
       
-      // Update the voice note with transcription
       voiceNote.transcription = result.transcription;
       
     } catch (error) {
@@ -247,6 +354,12 @@ export default function VoiceNotesModal({
         return;
       }
 
+      // Stop any currently playing sound
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+
       setPlayingNoteId(voiceNote.id);
 
       if (Platform.OS === 'web') {
@@ -254,7 +367,19 @@ export default function VoiceNotesModal({
         audio.onended = () => setPlayingNoteId(null);
         await audio.play();
       } else {
-        setTimeout(() => setPlayingNoteId(null), voiceNote.duration * 1000);
+        // Native playback
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: voiceNote.uri },
+          { shouldPlay: true }
+        );
+        
+        soundRef.current = sound;
+        
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setPlayingNoteId(null);
+          }
+        });
       }
     } catch (error) {
       console.error('Error playing voice note:', error);

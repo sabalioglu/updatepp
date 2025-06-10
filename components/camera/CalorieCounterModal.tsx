@@ -14,7 +14,7 @@ interface NutritionAnalysis {
   healthScore: number;
   mealType: string;
   portionSize: string;
-  tips: string[];
+  nutritionalTips: string[];
 }
 
 interface CalorieCounterModalProps {
@@ -179,14 +179,14 @@ export default function CalorieCounterModal({
               </View>
 
               {/* Health Tips */}
-              {analysisResult.tips.length > 0 && (
+              {analysisResult.nutritionalTips && analysisResult.nutritionalTips.length > 0 && (
                 <View style={styles.tipsCard}>
                   <View style={styles.tipsHeader}>
                     <Info size={20} color={theme.colors.primary} />
                     <Text style={styles.sectionTitle}>Nutritional Tips</Text>
                   </View>
                   
-                  {analysisResult.tips.map((tip, index) => (
+                  {analysisResult.nutritionalTips.map((tip, index) => (
                     <View key={index} style={styles.tipItem}>
                       <Text style={styles.tipText}>• {tip}</Text>
                     </View>

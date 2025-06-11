@@ -12,122 +12,125 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-    
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: 'Gemini API key not configured' }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
     let finalTranscription = transcription;
 
-    // Step 1: Transcribe audio if not already provided
+    // Step 1: Transcribe audio using OpenAI Whisper if not already provided
     if (!transcription && audioBase64) {
-      const transcriptionPrompt = `Transcribe the following audio into plain text. Return only the raw transcription, no summary, analysis, or additional comments. If the audio is not clear, transcribe as accurately as possible.`;
+      const openaiApiKey = process.env.OPENAI_API_KEY;
+      
+      if (!openaiApiKey) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'OpenAI API key not configured',
+            transcription: null,
+            pantryItems: []
+          }),
+          {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
 
       try {
         // Use the provided mimeType or fallback to audio/mp4 for better compatibility
         const audioMimeType = mimeType || 'audio/mp4';
         
-        console.log('🎤 Gemini Transcription Request:', {
+        console.log('🎤 OpenAI Whisper Transcription Request:', {
           mimeType: audioMimeType,
           audioBase64Length: audioBase64.length,
-          apiKeyPresent: !!apiKey,
+          apiKeyPresent: !!openaiApiKey,
           timestamp: new Date().toISOString()
         });
+
+        // Convert base64 to blob for FormData
+        const audioBuffer = Buffer.from(audioBase64, 'base64');
+        const audioBlob = new Blob([audioBuffer], { type: audioMimeType });
         
-        const transcriptionResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        // Determine file extension based on MIME type
+        let fileExtension = '.m4a';
+        if (audioMimeType.includes('webm')) {
+          fileExtension = '.webm';
+        } else if (audioMimeType.includes('wav')) {
+          fileExtension = '.wav';
+        } else if (audioMimeType.includes('mp3')) {
+          fileExtension = '.mp3';
+        }
+
+        // Create FormData for Whisper API
+        const formData = new FormData();
+        formData.append('file', audioBlob, `voice${fileExtension}`);
+        formData.append('model', 'whisper-1');
+        formData.append('response_format', 'json');
+        formData.append('language', 'en'); // Optional: specify language
+
+        const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${openaiApiKey}`,
           },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: transcriptionPrompt
-                  },
-                  {
-                    inline_data: {
-                      mime_type: audioMimeType,
-                      data: audioBase64
-                    }
-                  }
-                ]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.1,
-              maxOutputTokens: 1000,
-            }
-          }),
+          body: formData,
         });
 
-        console.log('🎤 Gemini Transcription Response Status:', transcriptionResponse.status);
+        console.log('🎤 OpenAI Whisper Response Status:', whisperResponse.status);
 
-        if (!transcriptionResponse.ok) {
-          const rawError = await transcriptionResponse.text();
-          console.log("❌ Gemini Transcription API Raw Error:", rawError);
+        if (!whisperResponse.ok) {
+          const rawError = await whisperResponse.text();
+          console.log("❌ OpenAI Whisper API Raw Error:", rawError);
 
           try {
             const parsed = JSON.parse(rawError);
-            console.log("🧠 Gemini Transcription JSON Error:", parsed);
+            console.log("🧠 OpenAI Whisper JSON Error:", parsed);
             
-            // Log specific error details for iOS debugging
+            // Log specific error details for debugging
             if (parsed.error) {
-              console.log("🔍 Detailed Error Analysis:", {
-                code: parsed.error.code,
+              console.log("🔍 Detailed Whisper Error Analysis:", {
+                type: parsed.error.type,
                 message: parsed.error.message,
-                status: parsed.error.status,
-                details: parsed.error.details || 'No additional details',
+                code: parsed.error.code,
                 mimeTypeUsed: audioMimeType,
                 audioSize: audioBase64.length,
                 platform: 'API Route'
               });
             }
           } catch (e) {
-            console.log("⚠️ Gemini transcription response was not valid JSON.");
+            console.log("⚠️ OpenAI Whisper response was not valid JSON.");
             console.log("📄 Raw error content:", rawError.substring(0, 500));
           }
 
-          return {
-            statusCode: transcriptionResponse.status,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-            body: JSON.stringify({ 
-              error: 'Failed to transcribe audio',
+          return new Response(
+            JSON.stringify({ 
+              error: 'Failed to transcribe audio with Whisper',
               transcription: null,
               pantryItems: [],
               debugInfo: {
+                service: 'OpenAI Whisper',
                 mimeType: audioMimeType,
                 audioSize: audioBase64.length,
-                httpStatus: transcriptionResponse.status
+                httpStatus: whisperResponse.status
               }
             }),
-          };
+            {
+              status: whisperResponse.status,
+              headers: { 'Content-Type': 'application/json' },
+            }
+          );
         }
 
-        const transcriptionData = await transcriptionResponse.json();
-        finalTranscription = transcriptionData.candidates?.[0]?.content?.parts?.[0]?.text;
+        const whisperData = await whisperResponse.json();
+        finalTranscription = whisperData.text;
 
-        console.log('✅ Transcription Success:', {
+        console.log('✅ Whisper Transcription Success:', {
           transcriptionLength: finalTranscription?.length || 0,
-          hasContent: !!finalTranscription
+          hasContent: !!finalTranscription,
+          service: 'OpenAI Whisper'
         });
 
         if (!finalTranscription) {
-          console.log('❌ No transcription content received from Gemini');
+          console.log('❌ No transcription content received from Whisper');
           return new Response(
             JSON.stringify({ 
-              error: 'No transcription received from AI',
+              error: 'No transcription received from Whisper',
               transcription: null,
               pantryItems: []
             }),
@@ -139,9 +142,9 @@ export async function POST(request: Request) {
         }
 
         finalTranscription = finalTranscription.trim();
-        console.log('📝 Final Transcription:', finalTranscription);
+        console.log('📝 Final Whisper Transcription:', finalTranscription);
       } catch (transcriptionError) {
-        console.error('💥 Transcription Request Error:', transcriptionError);
+        console.error('💥 Whisper Transcription Request Error:', transcriptionError);
         console.error('🔧 Error Details:', {
           name: transcriptionError.name,
           message: transcriptionError.message,
@@ -150,10 +153,11 @@ export async function POST(request: Request) {
         
         return new Response(
           JSON.stringify({ 
-            error: 'Failed to transcribe audio',
+            error: 'Failed to transcribe audio with Whisper',
             transcription: null,
             pantryItems: [],
             debugInfo: {
+              service: 'OpenAI Whisper',
               errorType: transcriptionError.name,
               errorMessage: transcriptionError.message
             }
@@ -166,7 +170,23 @@ export async function POST(request: Request) {
       }
     }
 
-    // Step 2: Extract pantry items from transcription
+    // Step 2: Extract pantry items from transcription using Gemini
+    const geminiApiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    
+    if (!geminiApiKey) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Gemini API key not configured',
+          transcription: finalTranscription,
+          pantryItems: []
+        }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const extractionPrompt = `You are a pantry management AI for Pantry Pal. Your ONLY purpose is to:
 
 1. Extract food items from voice transcriptions
@@ -215,9 +235,9 @@ Voice transcription to analyze: "${finalTranscription}"`;
     let extractionError = null;
 
     try {
-      console.log('🔍 Starting pantry item extraction...');
+      console.log('🔍 Starting pantry item extraction with Gemini...');
       
-      const extractionResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const extractionResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -254,13 +274,13 @@ Voice transcription to analyze: "${finalTranscription}"`;
             summary = parsedResponse.summary || 'Items extracted from voice note';
             suggestions = Array.isArray(parsedResponse.suggestions) ? parsedResponse.suggestions : [];
             
-            console.log('✅ Extraction Success:', {
+            console.log('✅ Gemini Extraction Success:', {
               itemsFound: pantryItems.length,
               summary: summary
             });
           }
         } catch (parseError) {
-          console.error('💥 Error parsing extraction response:', parseError);
+          console.error('💥 Error parsing Gemini extraction response:', parseError);
           extractionError = 'Failed to parse pantry items from transcription';
         }
       } else {
@@ -278,7 +298,7 @@ Voice transcription to analyze: "${finalTranscription}"`;
         extractionError = 'Failed to extract pantry items from transcription';
       }
     } catch (extractionRequestError) {
-      console.error('💥 Extraction request error:', extractionRequestError);
+      console.error('💥 Gemini extraction request error:', extractionRequestError);
       console.error('🔧 Error Details:', {
         name: extractionRequestError.name,
         message: extractionRequestError.message
@@ -302,7 +322,9 @@ Voice transcription to analyze: "${finalTranscription}"`;
     console.log('📤 Final API Response:', {
       hasTranscription: !!response.transcription,
       itemCount: response.pantryItems.length,
-      hasError: !!response.error
+      hasError: !!response.error,
+      transcriptionService: 'OpenAI Whisper',
+      extractionService: 'Google Gemini'
     });
 
     return new Response(

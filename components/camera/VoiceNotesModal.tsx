@@ -333,7 +333,7 @@ export default function VoiceNotesModal({
 
   const transcribeAudio = async (voiceNote: VoiceNote, audioBase64: string, mimeType: string) => {
     try {
-      console.log('VoiceNotesModal: Sending audio for transcription, base64 length:', audioBase64.length, 'mimeType:', mimeType);
+      console.log('VoiceNotesModal: Sending audio for Whisper transcription, base64 length:', audioBase64.length, 'mimeType:', mimeType);
       
       const response = await fetch('/api/voice-to-pantry', {
         method: 'POST',
@@ -348,18 +348,18 @@ export default function VoiceNotesModal({
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('VoiceNotesModal: Transcription API error:', errorData);
-        throw new Error(errorData.error || 'Failed to transcribe audio');
+        console.error('VoiceNotesModal: Whisper transcription API error:', errorData);
+        throw new Error(errorData.error || 'Failed to transcribe audio with Whisper');
       }
 
       const result = await response.json();
-      console.log('VoiceNotesModal: Transcription result:', result);
+      console.log('VoiceNotesModal: Whisper transcription result:', result);
       
       voiceNote.transcription = result.transcription;
       
     } catch (error) {
-      console.error('VoiceNotesModal: Transcription error:', error);
-      voiceNote.transcription = 'Failed to transcribe audio';
+      console.error('VoiceNotesModal: Whisper transcription error:', error);
+      voiceNote.transcription = 'Failed to transcribe audio with Whisper';
     }
   };
 
@@ -638,6 +638,9 @@ export default function VoiceNotesModal({
             <Text style={styles.recordingHint}>
               Say: "I bought 2 pounds of chicken, 1 gallon of milk, and 6 bananas"
             </Text>
+            <Text style={styles.recordingSubhint}>
+              Powered by OpenAI Whisper for accurate transcription
+            </Text>
           </View>
 
           {/* Voice Notes List */}
@@ -747,7 +750,7 @@ export default function VoiceNotesModal({
                     <View style={styles.transcriptionSection}>
                       <View style={styles.transcriptionHeader}>
                         <MessageSquare size={20} color={theme.colors.primary} />
-                        <Text style={styles.transcriptionTitle}>Transcription</Text>
+                        <Text style={styles.transcriptionTitle}>Whisper Transcription</Text>
                       </View>
                       <View style={styles.transcriptionBox}>
                         <Text style={styles.transcriptionText}>
@@ -942,6 +945,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontStyle: 'italic',
+    marginBottom: theme.spacing.xs,
+  },
+  recordingSubhint: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: theme.colors.primary,
+    textAlign: 'center',
+    fontWeight: '600',
   },
   notesSection: {
     marginBottom: theme.spacing.lg,

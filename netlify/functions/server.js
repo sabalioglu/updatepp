@@ -436,6 +436,7 @@ Please analyze this meal image and provide detailed nutritional information.`;
 
               // Convert base64 to buffer for FormData
               const audioBuffer = Buffer.from(audioBase64, 'base64');
+              console.log('🎤 Netlify Audio buffer size:', audioBuffer.length, 'bytes');
               
               // Determine file extension based on MIME type
               let fileExtension = '.m4a';
@@ -470,7 +471,13 @@ Please analyze this meal image and provide detailed nutritional information.`;
               console.log('🎤 Netlify OpenAI Whisper Response Status:', whisperResponse.status);
 
               if (!whisperResponse.ok) {
-                const rawError = await whisperResponse.text();
+                let rawError = '';
+                try {
+                  rawError = await whisperResponse.text();
+                } catch (e) {
+                  rawError = '[Unable to read error body]';
+                }
+                
                 console.log("❌ Netlify OpenAI Whisper API Raw Error:", rawError);
 
                 try {
@@ -484,7 +491,7 @@ Please analyze this meal image and provide detailed nutritional information.`;
                       message: parsed.error.message,
                       code: parsed.error.code,
                       mimeTypeUsed: audioMimeType,
-                      audioSize: audioBase64.length,
+                      audioSize: audioBuffer.length,
                       platform: 'Netlify Function'
                     });
                   }
@@ -506,7 +513,7 @@ Please analyze this meal image and provide detailed nutritional information.`;
                     debugInfo: {
                       service: 'OpenAI Whisper',
                       mimeType: audioMimeType,
-                      audioSize: audioBase64.length,
+                      audioSize: audioBuffer.length,
                       httpStatus: whisperResponse.status
                     }
                   }),
@@ -568,10 +575,10 @@ Please analyze this meal image and provide detailed nutritional information.`;
             }
           }
 
-          // Step 2: Extract pantry items from transcription using Gemini
-          const geminiApiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+          // Step 2: Extract pantry items from transcription using OpenAI GPT-4.1 Mini
+          const openaiApiKey = process.env.OPENAI_API_KEY;
           
-          if (!geminiApiKey) {
+          if (!openaiApiKey) {
             return {
               statusCode: 500,
               headers: {
@@ -579,35 +586,41 @@ Please analyze this meal image and provide detailed nutritional information.`;
                 'Access-Control-Allow-Origin': '*',
               },
               body: JSON.stringify({ 
-                error: 'Gemini API key not configured',
+                error: 'OpenAI API key not configured',
                 transcription: finalTranscription,
                 pantryItems: []
               }),
             };
           }
 
-          const extractionPrompt = `You are a pantry management AI for Pantry Pal. Your ONLY purpose is to:
+          let pantryItems = [];
+          let summary = 'Transcription completed';
+          let suggestions = [];
+          let extractionError = null;
 
-1. Extract food items from voice transcriptions
-2. Determine quantities, units, and categories
-3. Estimate expiry dates based on typical food storage
-4. Structure data for pantry inventory
+          try {
+            console.log('🔍 Netlify Starting pantry item extraction with GPT-4.1 Mini...');
+            
+            const extractionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${openaiApiKey}`,
+              },
+              body: JSON.stringify({
+                model: 'gpt-4o-mini',
+                temperature: 0.3,
+                messages: [
+                  {
+                    role: 'system',
+                    content: 'You are a pantry assistant that returns structured JSON data for food inventory management. You ONLY process food-related voice notes and extract specific food items with quantities, categories, and storage information. Always respond with valid JSON in the exact format specified.'
+                  },
+                  {
+                    role: 'user',
+                    content: `Voice transcription to analyze: "${finalTranscription}". 
 
-STRICT RULES:
-- ONLY process food-related voice notes
-- Extract specific food items with quantities when mentioned
-- Assign appropriate food categories (fruits, vegetables, dairy, meat, seafood, grains, canned, frozen, spices, condiments, other)
-- Estimate realistic expiry dates
-- If no food items are mentioned, return empty arrays
+Please return the data in strict JSON format as specified:
 
-When analyzing voice transcriptions:
-1. Identify all food items mentioned
-2. Extract quantities and units (estimate if not specified)
-3. Assign appropriate categories
-4. Calculate expiry dates based on typical storage life
-5. Generate helpful notes from the voice content
-
-Format your response as JSON with this structure:
 {
   "pantryItems": [
     {
@@ -626,44 +639,23 @@ Format your response as JSON with this structure:
   ]
 }
 
-Voice transcription to analyze: "${finalTranscription}"`;
-
-          let pantryItems = [];
-          let summary = 'Transcription completed';
-          let suggestions = [];
-          let extractionError = null;
-
-          try {
-            console.log('🔍 Netlify Starting pantry item extraction with Gemini...');
-            
-            const extractionResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    parts: [
-                      {
-                        text: extractionPrompt
-                      }
-                    ]
+Rules:
+- Extract specific food items with quantities when mentioned
+- Assign appropriate food categories (fruits, vegetables, dairy, meat, seafood, grains, canned, frozen, spices, condiments, other)
+- Estimate realistic expiry dates based on typical storage life
+- If no food items are mentioned, return empty arrays
+- Generate helpful storage suggestions`
                   }
-                ],
-                generationConfig: {
-                  temperature: 0.3,
-                  maxOutputTokens: 1000,
-                }
+                ]
               }),
             });
 
-            console.log('🔍 Netlify Gemini Extraction Response Status:', extractionResponse.status);
+            console.log('🔍 Netlify GPT-4.1 Mini Extraction Response Status:', extractionResponse.status);
 
             if (extractionResponse.ok) {
               try {
                 const extractionData = await extractionResponse.json();
-                const aiResponse = extractionData.candidates?.[0]?.content?.parts?.[0]?.text;
+                const aiResponse = extractionData.choices?.[0]?.message?.content;
 
                 if (aiResponse) {
                   const cleanedResponse = aiResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -673,36 +665,48 @@ Voice transcription to analyze: "${finalTranscription}"`;
                   summary = parsedResponse.summary || 'Items extracted from voice note';
                   suggestions = Array.isArray(parsedResponse.suggestions) ? parsedResponse.suggestions : [];
                   
-                  console.log('✅ Netlify Gemini Extraction Success:', {
+                  console.log('✅ Netlify GPT-4.1 Mini Extraction Success:', {
                     itemsFound: pantryItems.length,
                     summary: summary
                   });
                 }
               } catch (parseError) {
-                console.error('💥 Netlify Error parsing Gemini extraction response:', parseError);
+                console.error('💥 Netlify Error parsing GPT-4.1 Mini extraction response:', parseError);
                 extractionError = 'Failed to parse pantry items from transcription';
+                summary = "Could not extract pantry items from AI response.";
+                suggestions = ["Please rephrase your voice note or try again."];
               }
             } else {
-              const rawError = await extractionResponse.text();
-              console.log("❌ Netlify Gemini Extraction API Raw Error:", rawError);
+              let rawError = '';
+              try {
+                rawError = await extractionResponse.text();
+              } catch (e) {
+                rawError = '[Unable to read error body]';
+              }
+              
+              console.log("❌ Netlify GPT-4.1 Mini Extraction API Raw Error:", rawError);
 
               try {
                 const parsed = JSON.parse(rawError);
-                console.log("🧠 Netlify Gemini Extraction JSON Error:", parsed);
+                console.log("🧠 Netlify GPT-4.1 Mini Extraction JSON Error:", parsed);
               } catch (e) {
-                console.log("⚠️ Netlify Gemini extraction response was not valid JSON.");
+                console.log("⚠️ Netlify GPT-4.1 Mini extraction response was not valid JSON.");
                 console.log("📄 Raw error content:", rawError.substring(0, 500));
               }
 
               extractionError = 'Failed to extract pantry items from transcription';
+              summary = "Could not extract pantry items from AI response.";
+              suggestions = ["Please rephrase your voice note or try again."];
             }
           } catch (extractionRequestError) {
-            console.error('💥 Netlify Gemini extraction request error:', extractionRequestError);
+            console.error('💥 Netlify GPT-4.1 Mini extraction request error:', extractionRequestError);
             console.error('🔧 Netlify Error Details:', {
               name: extractionRequestError.name,
               message: extractionRequestError.message
             });
             extractionError = 'Failed to extract pantry items from transcription';
+            summary = "Could not extract pantry items from AI response.";
+            suggestions = ["Please rephrase your voice note or try again."];
           }
 
           // Return both transcription and pantry items (even if extraction failed)
@@ -723,7 +727,7 @@ Voice transcription to analyze: "${finalTranscription}"`;
             itemCount: response.pantryItems.length,
             hasError: !!response.error,
             transcriptionService: 'OpenAI Whisper',
-            extractionService: 'Google Gemini'
+            extractionService: 'OpenAI GPT-4.1 Mini'
           });
 
           return {

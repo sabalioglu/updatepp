@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal, Alert, Platform } from 'react-native';
 import { usePantryItems } from '@/hooks/usePantryItems';
 import { theme } from '@/constants/theme';
-import { X, Mic, Square, Play, Pause, Trash2, Clock, FileAudio, Plus, Sparkles, Check, MessageSquare } from 'lucide-react-native';
+import { X, Mic, Square, Play, Pause, Trash2, Clock, FileAudio, Plus, Sparkles, Check, MessageSquare, Zap } from 'lucide-react-native';
 import { PantryItem, FoodCategory } from '@/types';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
@@ -56,6 +56,7 @@ export default function VoiceNotesModal({
   const [analysisResult, setAnalysisResult] = useState<PantryAnalysisResult | null>(null);
   const [showAnalysisResult, setShowAnalysisResult] = useState(false);
   const [addingToPantry, setAddingToPantry] = useState(false);
+  const [transcribingNoteId, setTranscribingNoteId] = useState<string | null>(null);
   
   const { addItem } = usePantryItems();
   
@@ -82,7 +83,11 @@ export default function VoiceNotesModal({
     
     if (Platform.OS === 'web') {
       if (soundRef.current) {
-        await soundRef.current.unloadAsync();
+        try {
+          await soundRef.current.unloadAsync();
+        } catch (error) {
+          console.log('VoiceNotesModal: Error unloading web sound:', error);
+        }
       }
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
@@ -92,14 +97,14 @@ export default function VoiceNotesModal({
         try {
           await recordingRef.current.stopAndUnloadAsync();
         } catch (error) {
-          console.log('Error stopping recording:', error);
+          console.log('VoiceNotesModal: Error stopping native recording:', error);
         }
       }
       if (soundRef.current) {
         try {
           await soundRef.current.unloadAsync();
         } catch (error) {
-          console.log('Error unloading sound:', error);
+          console.log('VoiceNotesModal: Error unloading native sound:', error);
         }
       }
     }
@@ -160,15 +165,6 @@ export default function VoiceNotesModal({
     }
   };
 
-  const getMimeTypeForPlatform = (): string => {
-    if (Platform.OS === 'web') {
-      return 'audio/webm;codecs=opus';
-    } else {
-      // Native platforms use .m4a format
-      return 'audio/mp4';
-    }
-  };
-
   const startRecording = async () => {
     if (!recordingPermission) {
       Alert.alert('Permission Required', 'Microphone access is required to record voice notes.');
@@ -211,11 +207,9 @@ export default function VoiceNotesModal({
         mediaRecorder.onstop = async () => {
           try {
             const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
-            const audioBase64 = await convertBlobToBase64(audioBlob);
             const url = URL.createObjectURL(audioBlob);
             
             console.log('VoiceNotesModal: Web audio recorded, size:', audioBlob.size, 'bytes');
-            console.log('VoiceNotesModal: Base64 length:', audioBase64.length);
             
             const voiceNote: VoiceNote = {
               id: Date.now().toString(),
@@ -226,8 +220,11 @@ export default function VoiceNotesModal({
               mimeType: 'audio/webm;codecs=opus',
             };
             
-            await transcribeAudio(voiceNote, audioBase64, 'audio/webm;codecs=opus');
             onVoiceNoteAdded(voiceNote);
+            
+            // Start transcription immediately
+            transcribeAudio(voiceNote);
+            
             stream.getTracks().forEach(track => track.stop());
           } catch (error) {
             console.error('VoiceNotesModal: Error processing web recorded audio:', error);
@@ -301,25 +298,19 @@ export default function VoiceNotesModal({
           if (uri) {
             console.log('VoiceNotesModal: Native recording stopped, URI:', uri);
             
-            try {
-              const audioBase64 = await convertFileToBase64(uri);
-              console.log('VoiceNotesModal: Native audio base64 length:', audioBase64.length);
-              
-              const voiceNote: VoiceNote = {
-                id: Date.now().toString(),
-                uri: uri,
-                duration: recordingDuration,
-                timestamp: new Date().toISOString(),
-                processed: false,
-                mimeType: 'audio/mp4',
-              };
-              
-              await transcribeAudio(voiceNote, audioBase64, 'audio/mp4');
-              onVoiceNoteAdded(voiceNote);
-            } catch (error) {
-              console.error('VoiceNotesModal: Error processing native recorded audio:', error);
-              Alert.alert('Error', 'Failed to process recorded audio.');
-            }
+            const voiceNote: VoiceNote = {
+              id: Date.now().toString(),
+              uri: uri,
+              duration: recordingDuration,
+              timestamp: new Date().toISOString(),
+              processed: false,
+              mimeType: 'audio/mp4',
+            };
+            
+            onVoiceNoteAdded(voiceNote);
+            
+            // Start transcription immediately
+            transcribeAudio(voiceNote);
           }
           
           recordingRef.current = null;
@@ -331,9 +322,14 @@ export default function VoiceNotesModal({
     }
   };
 
-  const transcribeAudio = async (voiceNote: VoiceNote, audioBase64: string, mimeType: string) => {
+  const transcribeAudio = async (voiceNote: VoiceNote) => {
+    setTranscribingNoteId(voiceNote.id);
+    
     try {
-      console.log('VoiceNotesModal: Sending audio for Whisper transcription, base64 length:', audioBase64.length, 'mimeType:', mimeType);
+      console.log('VoiceNotesModal: Starting Whisper transcription for note:', voiceNote.id);
+      
+      const audioBase64 = await convertFileToBase64(voiceNote.uri);
+      console.log('VoiceNotesModal: Audio converted to base64, length:', audioBase64.length);
       
       const response = await fetch('/api/voice-to-pantry', {
         method: 'POST',
@@ -342,7 +338,7 @@ export default function VoiceNotesModal({
         },
         body: JSON.stringify({
           audioBase64: audioBase64,
-          mimeType: mimeType,
+          mimeType: voiceNote.mimeType || (Platform.OS === 'web' ? 'audio/webm;codecs=opus' : 'audio/mp4'),
         }),
       });
 
@@ -355,11 +351,18 @@ export default function VoiceNotesModal({
       const result = await response.json();
       console.log('VoiceNotesModal: Whisper transcription result:', result);
       
-      voiceNote.transcription = result.transcription;
+      // Update the voice note with transcription
+      voiceNote.transcription = result.transcription || 'Transcription failed';
+      
+      // Trigger a re-render by updating the parent component
+      onVoiceNoteAdded({ ...voiceNote });
       
     } catch (error) {
       console.error('VoiceNotesModal: Whisper transcription error:', error);
       voiceNote.transcription = 'Failed to transcribe audio with Whisper';
+      onVoiceNoteAdded({ ...voiceNote });
+    } finally {
+      setTranscribingNoteId(null);
     }
   };
 
@@ -638,9 +641,12 @@ export default function VoiceNotesModal({
             <Text style={styles.recordingHint}>
               Say: "I bought 2 pounds of chicken, 1 gallon of milk, and 6 bananas"
             </Text>
-            <Text style={styles.recordingSubhint}>
-              Powered by OpenAI Whisper for accurate transcription
-            </Text>
+            <View style={styles.whisperBadge}>
+              <Zap size={16} color={theme.colors.primary} />
+              <Text style={styles.whisperBadgeText}>
+                Powered by OpenAI Whisper for accurate transcription
+              </Text>
+            </View>
           </View>
 
           {/* Voice Notes List */}
@@ -685,9 +691,18 @@ export default function VoiceNotesModal({
                         </View>
                       </View>
                       
-                      {note.transcription && (
+                      {transcribingNoteId === note.id ? (
+                        <View style={styles.transcribingIndicator}>
+                          <Zap size={16} color={theme.colors.primary} />
+                          <Text style={styles.transcribingText}>Transcribing with Whisper...</Text>
+                        </View>
+                      ) : note.transcription ? (
                         <Text style={styles.noteTranscription}>
                           "{note.transcription}"
+                        </Text>
+                      ) : (
+                        <Text style={styles.noTranscription}>
+                          Transcription failed
                         </Text>
                       )}
 
@@ -700,7 +715,7 @@ export default function VoiceNotesModal({
                     </View>
                     
                     <View style={styles.noteActions}>
-                      {!note.processed && note.transcription && (
+                      {!note.processed && note.transcription && transcribingNoteId !== note.id && (
                         <TouchableOpacity
                           style={[
                             styles.processButton,
@@ -749,7 +764,7 @@ export default function VoiceNotesModal({
                   {analysisResult.transcription && (
                     <View style={styles.transcriptionSection}>
                       <View style={styles.transcriptionHeader}>
-                        <MessageSquare size={20} color={theme.colors.primary} />
+                        <Zap size={20} color={theme.colors.primary} />
                         <Text style={styles.transcriptionTitle}>Whisper Transcription</Text>
                       </View>
                       <View style={styles.transcriptionBox}>
@@ -945,14 +960,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontStyle: 'italic',
-    marginBottom: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
   },
-  recordingSubhint: {
-    fontFamily: 'Inter-Regular',
+  whisperBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.gray[100],
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.md,
+    gap: theme.spacing.xs,
+  },
+  whisperBadgeText: {
+    fontFamily: 'Inter-Medium',
     fontSize: 12,
     color: theme.colors.primary,
-    textAlign: 'center',
-    fontWeight: '600',
   },
   notesSection: {
     marginBottom: theme.spacing.lg,
@@ -1026,10 +1048,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: theme.colors.gray[600],
   },
+  transcribingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.gray[100],
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.sm,
+    marginBottom: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  transcribingText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: theme.colors.primary,
+    fontStyle: 'italic',
+  },
   noteTranscription: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
     color: theme.colors.gray[700],
+    lineHeight: 18,
+    marginBottom: theme.spacing.xs,
+    fontStyle: 'italic',
+  },
+  noTranscription: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: theme.colors.error,
     lineHeight: 18,
     marginBottom: theme.spacing.xs,
     fontStyle: 'italic',

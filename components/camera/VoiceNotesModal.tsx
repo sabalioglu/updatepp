@@ -235,7 +235,7 @@ export default function VoiceNotesModal({
 
         mediaRecorder.start(1000);
       } else {
-        // Native recording
+        // Native recording with Android-optimized settings for Whisper
         const recording = new Audio.Recording();
         await recording.prepareToRecordAsync({
           android: {
@@ -305,7 +305,7 @@ export default function VoiceNotesModal({
               duration: recordingDuration,
               timestamp: new Date().toISOString(),
               processed: false,
-              mimeType: 'audio/mp4',
+              mimeType: Platform.OS === 'android' ? 'audio/m4a' : 'audio/mp4',
             };
             
             onVoiceNoteAdded(voiceNote);
@@ -332,6 +332,14 @@ export default function VoiceNotesModal({
       const audioBase64 = await convertFileToBase64(voiceNote.uri);
       console.log('VoiceNotesModal: Audio converted to base64, length:', audioBase64.length);
       
+      // Normalize MIME type for better Whisper compatibility
+      let mimeType = voiceNote.mimeType;
+      if (Platform.OS === 'android') {
+        mimeType = 'audio/m4a';
+      } else if (voiceNote.mimeType === 'audio/mp4') {
+        mimeType = 'audio/m4a';
+      }
+      
       const response = await fetch('/api/voice-to-pantry', {
         method: 'POST',
         headers: {
@@ -339,7 +347,7 @@ export default function VoiceNotesModal({
         },
         body: JSON.stringify({
           audioBase64: audioBase64,
-          mimeType: voiceNote.mimeType || (Platform.OS === 'web' ? 'audio/webm;codecs=opus' : 'audio/mp4'),
+          mimeType: mimeType || (Platform.OS === 'web' ? 'audio/webm;codecs=opus' : 'audio/m4a'),
         }),
       });
 

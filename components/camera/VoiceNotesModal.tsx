@@ -644,12 +644,6 @@ export default function VoiceNotesModal({
             <Text style={styles.recordingHint}>
               Say: "I bought 2 pounds of chicken, 1 gallon of milk, and 6 bananas"
             </Text>
-            <View style={styles.whisperBadge}>
-              <Zap size={16} color={theme.colors.primary} />
-              <Text style={styles.whisperBadgeText}>
-                Powered by OpenAI Whisper for accurate transcription
-              </Text>
-            </View>
           </View>
 
           {/* Voice Notes List */}
@@ -965,19 +959,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginBottom: theme.spacing.sm,
   },
-  whisperBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.gray[100],
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.borderRadius.md,
-    gap: theme.spacing.xs,
-  },
-  whisperBadgeText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 12,
-    color: theme.colors.primary,
   },
   notesSection: {
     marginBottom: theme.spacing.lg,

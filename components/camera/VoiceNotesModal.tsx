@@ -41,6 +41,9 @@ interface PantryAnalysisResult {
   error?: string;
 }
 
+// Helper function to generate unique IDs
+const generateUniqueId = () => `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+
 export default function VoiceNotesModal({
   visible,
   onClose,
@@ -212,7 +215,7 @@ export default function VoiceNotesModal({
             console.log('VoiceNotesModal: Web audio recorded, size:', audioBlob.size, 'bytes');
             
             const voiceNote: VoiceNote = {
-              id: Date.now().toString(),
+              id: generateUniqueId(),
               uri: url,
               duration: recordingDuration,
               timestamp: new Date().toISOString(),
@@ -299,7 +302,7 @@ export default function VoiceNotesModal({
             console.log('VoiceNotesModal: Native recording stopped, URI:', uri);
             
             const voiceNote: VoiceNote = {
-              id: Date.now().toString(),
+              id: generateUniqueId(),
               uri: uri,
               duration: recordingDuration,
               timestamp: new Date().toISOString(),
@@ -490,7 +493,7 @@ export default function VoiceNotesModal({
           const image = getFoodImage(item.name, category);
           
           const pantryItem: PantryItem = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            id: generateUniqueId(),
             name: item.name,
             category: category,
             quantity: item.quantity,

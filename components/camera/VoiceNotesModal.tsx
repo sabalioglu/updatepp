@@ -660,8 +660,8 @@ export default function VoiceNotesModal({
               </View>
             ) : (
               <View style={styles.notesList}>
-                {voiceNotes.map((note) => (
-                  <View key={note.id} style={styles.noteItem}>
+                {voiceNotes.map((note, index) => (
+                  <View key={`${note.id}-${index}-${note.timestamp}`} style={styles.noteItem}>
                     <TouchableOpacity
                       style={styles.playButton}
                       onPress={() => playVoiceNote(note)}

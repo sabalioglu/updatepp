@@ -7,7 +7,7 @@ import { PantryItem, FoodCategory } from '@/types';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { getFoodImage } from '@/utils/foodImages';
-import { v4 as uuidv4 } from 'uuid';
+import { generateUniqueId } from '@/utils/idGenerator';
 
 interface VoiceNote {
   id: string;
@@ -41,9 +41,6 @@ interface PantryAnalysisResult {
   suggestions?: string[];
   error?: string;
 }
-
-// Helper function to generate unique IDs using UUID
-const generateUniqueId = () => uuidv4();
 
 export default function VoiceNotesModal({
   visible,

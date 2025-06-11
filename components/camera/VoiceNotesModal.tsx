@@ -6,8 +6,8 @@ import { X, Mic, Square, Play, Pause, Trash2, Clock, FileAudio, Plus, Sparkles, 
 import { PantryItem, FoodCategory } from '@/types';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
-import { getFoodImage } from '@/utils/foodImages';
-import { generateUniqueId } from '@/utils/idGenerator';
+import { getFoodImage } from '../../utils/foodImages';
+import { generateUniqueId } from '../../utils/idGenerator';
 
 interface VoiceNote {
   id: string;

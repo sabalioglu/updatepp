@@ -5,6 +5,9 @@
   "private": true,
   "scripts": {
     "start": "EXPO_NO_TELEMETRY=1 expo start",
+    "start:tunnel": "EXPO_NO_TELEMETRY=1 expo start --tunnel",
+    "start:lan": "EXPO_NO_TELEMETRY=1 expo start --lan",
+    "start:localhost": "EXPO_NO_TELEMETRY=1 expo start --localhost",
     "dev": "EXPO_NO_TELEMETRY=1 expo start",
     "build:web": "expo export --platform web",
     "lint": "expo lint"

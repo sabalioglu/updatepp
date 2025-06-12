@@ -11,8 +11,19 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access camera for barcode scanning.",
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone"
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access camera for barcode scanning and food photography.",
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone for voice notes."
+      }
+    },
+    "android": {
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.anonymous.pantrypal",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#FFFFFF"
       }
     },
     "web": {
@@ -25,20 +36,34 @@
       "expo-font",
       "expo-web-browser",
       [
-        "expo-barcode-scanner",
+        "expo-camera",
         {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access camera for barcode scanning."
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access camera for barcode scanning and food photography."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone for voice notes."
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
     },
-    "android": {
-      "permissions": [
-        "android.permission.CAMERA"
-      ],
-      "package": "com.anonymous.pantrypal"
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
     }
   }
 }

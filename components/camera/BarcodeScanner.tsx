@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Alert, Platform, TextInput } from 'react-native';
 import { theme } from '@/constants/theme';
-import { X, Package, Zap, Search, AlertCircle } from 'lucide-react-native';
+import { X, Package, Zap, Search, CircleAlert as AlertCircle } from 'lucide-react-native';
 
 interface BarcodeScannerProps {
   visible: boolean;

@@ -7,11 +7,13 @@ import Header from '@/components/common/Header';
 import FoodAnalysisModal from '@/components/camera/FoodAnalysisModal';
 import CalorieCounterModal from '@/components/camera/CalorieCounterModal';
 import VoiceNotesModal from '@/components/camera/VoiceNotesModal';
+import BarcodeScanner from '@/components/camera/BarcodeScanner';
+import ProductLookupModal from '@/components/camera/ProductLookupModal';
 import { theme } from '@/constants/theme';
-import { Camera as CameraIcon, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator, Mic, Trash2, Package } from 'lucide-react-native';
+import { Camera as CameraIcon, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator, Mic, Trash2, Package, QrCode } from 'lucide-react-native';
 import * as FileSystem from 'expo-file-system';
 
-type CaptureMode = 'photo' | 'multi-photo';
+type CaptureMode = 'photo' | 'multi-photo' | 'barcode';
 type FlashMode = 'off' | 'on' | 'auto';
 
 interface FoodAnalysisResult {
@@ -68,6 +70,9 @@ export default function CameraScreen() {
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [showCalorieModal, setShowCalorieModal] = useState(false);
   const [showVoiceModal, setShowVoiceModal] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [showProductLookup, setShowProductLookup] = useState(false);
+  const [scannedBarcode, setScannedBarcode] = useState('');
   const [analysisResult, setAnalysisResult] = useState<FoodAnalysisResult | null>(null);
   const [calorieResult, setCalorieResult] = useState<CalorieAnalysisResult | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -79,7 +84,7 @@ export default function CameraScreen() {
   if (!cameraPermission) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Voice Notes\" showBack onBackPress={() => router.back()} />
+        <Header title="Camera & Voice Notes" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading permissions...</Text>
         </View>
@@ -96,7 +101,7 @@ export default function CameraScreen() {
           <CameraIcon size={64} color={theme.colors.gray[400]} />
           <Text style={styles.permissionTitle}>Camera Permission Required</Text>
           <Text style={styles.permissionText}>
-            We need access to your camera to take photos, analyze food items, and record voice notes about your pantry.
+            We need access to your camera to take photos, analyze food items, scan barcodes, and record voice notes about your pantry.
           </Text>
           <TouchableOpacity style={styles.permissionButton} onPress={requestCameraPermission}>
             <Text style={styles.permissionButtonText}>Grant Permission</Text>
@@ -111,10 +116,19 @@ export default function CameraScreen() {
   };
 
   const toggleCaptureMode = () => {
-    setCaptureMode(current => current === 'photo' ? 'multi-photo' : 'photo');
+    const modes: CaptureMode[] = ['photo', 'multi-photo', 'barcode'];
+    const currentIndex = modes.indexOf(captureMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setCaptureMode(modes[nextIndex]);
+    
     // Clear captured media when switching modes
     setCapturedMedia([]);
     setShowPreview(false);
+    
+    // Show barcode scanner immediately when switching to barcode mode
+    if (modes[nextIndex] === 'barcode') {
+      setShowBarcodeScanner(true);
+    }
   };
 
   const toggleFlashMode = () => {
@@ -129,7 +143,7 @@ export default function CameraScreen() {
   };
 
   const takePicture = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || captureMode === 'barcode') return;
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
@@ -173,6 +187,13 @@ export default function CameraScreen() {
   const addMorePhotos = () => {
     // Return to camera view while keeping existing photos
     setShowPreview(false);
+  };
+
+  const handleBarcodeScanned = (barcode: string) => {
+    console.log('CameraScreen: Barcode scanned:', barcode);
+    setScannedBarcode(barcode);
+    setShowBarcodeScanner(false);
+    setShowProductLookup(true);
   };
 
   const convertImageToBase64 = async (imageUri: string): Promise<string> => {
@@ -328,6 +349,33 @@ export default function CameraScreen() {
       default: return FlashOff;
     }
   };
+
+  const getModeIcon = () => {
+    switch (captureMode) {
+      case 'barcode': return QrCode;
+      case 'multi-photo': return CameraIcon;
+      default: return CameraIcon;
+    }
+  };
+
+  const getModeLabel = () => {
+    switch (captureMode) {
+      case 'barcode': return 'Barcode';
+      case 'multi-photo': return 'Multi';
+      default: return 'Single';
+    }
+  };
+
+  // Show barcode scanner
+  if (showBarcodeScanner) {
+    return (
+      <BarcodeScanner
+        visible={showBarcodeScanner}
+        onClose={() => setShowBarcodeScanner(false)}
+        onBarcodeScanned={handleBarcodeScanned}
+      />
+    );
+  }
 
   // Multi-photo preview mode
   if (showPreview && captureMode === 'multi-photo') {
@@ -530,7 +578,7 @@ export default function CameraScreen() {
   // Camera view
   return (
     <ScreenContainer scrollable={false} style={styles.container}>
-      <Header title="Camera & Voice Notes" showBack onBackPress={() => router.back()} />
+      <Header title="Smart Camera & Scanner" showBack onBackPress={() => router.back()} />
       
       <View style={styles.cameraContainer}>
         <CameraView 
@@ -573,11 +621,12 @@ export default function CameraScreen() {
                   <X size={20} color="white" />
                 </TouchableOpacity>
                 
-                <Mic size={32} color={theme.colors.primary} />
-                <Text style={styles.infoTitle}>Smart Food Camera</Text>
+                <QrCode size={32} color={theme.colors.primary} />
+                <Text style={styles.infoTitle}>Smart Camera & Scanner</Text>
                 <Text style={styles.infoText}>
                   • Single Photo: Quick food analysis{'\n'}
                   • Multi Photo: Multiple items at once{'\n'}
+                  • Barcode Scanner: Scan product barcodes{'\n'}
                   • AI Food Recognition: Identify ingredients{'\n'}
                   • Calorie Counter: Nutritional analysis{'\n'}
                   • Voice Notes: Record audio reminders
@@ -595,18 +644,27 @@ export default function CameraScreen() {
               style={styles.modeButton} 
               onPress={toggleCaptureMode}
             >
-              <CameraIcon size={24} color="white" />
+              {React.createElement(getModeIcon(), { size: 24, color: 'white' })}
               <Text style={styles.modeButtonText}>
-                {captureMode === 'multi-photo' ? 'Multi' : 'Single'}
+                {getModeLabel()}
               </Text>
             </TouchableOpacity>
             
-            <TouchableOpacity 
-              style={styles.captureButton} 
-              onPress={takePicture}
-            >
-              <View style={styles.captureButtonInner} />
-            </TouchableOpacity>
+            {captureMode !== 'barcode' ? (
+              <TouchableOpacity 
+                style={styles.captureButton} 
+                onPress={takePicture}
+              >
+                <View style={styles.captureButtonInner} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={styles.barcodeButton} 
+                onPress={() => setShowBarcodeScanner(true)}
+              >
+                <QrCode size={32} color="white" />
+              </TouchableOpacity>
+            )}
             
             <TouchableOpacity 
               style={styles.voiceNoteButton} 
@@ -625,6 +683,12 @@ export default function CameraScreen() {
         voiceNotes={voiceNotes}
         onVoiceNoteAdded={handleVoiceNoteAdded}
         onVoiceNoteDeleted={handleVoiceNoteDeleted}
+      />
+
+      <ProductLookupModal
+        visible={showProductLookup}
+        onClose={() => setShowProductLookup(false)}
+        barcode={scannedBarcode}
       />
     </ScreenContainer>
   );
@@ -783,6 +847,16 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     backgroundColor: 'white',
+  },
+  barcodeButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: 'white',
   },
   voiceNoteButton: {
     backgroundColor: 'rgba(0, 0, 0, 0.5)',

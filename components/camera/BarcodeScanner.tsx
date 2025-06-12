@@ -16,6 +16,7 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
   const [manualBarcode, setManualBarcode] = useState('');
   const [BarCodeScannerComponent, setBarCodeScannerComponent] = useState<any>(null);
   const [moduleError, setModuleError] = useState<string | null>(null);
+  const [moduleLoading, setModuleLoading] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -36,53 +37,102 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
       return;
     }
 
+    setModuleLoading(true);
+    setModuleError(null);
+
     try {
-      console.log('BarcodeScanner: Attempting to load expo-barcode-scanner...');
+      console.log('🔍 BarcodeScanner: Attempting to load expo-barcode-scanner...');
+      console.log('🔍 BarcodeScanner: Platform:', Platform.OS);
+      console.log('🔍 BarcodeScanner: React Native version:', Platform.constants?.reactNativeVersion);
       
       // Dynamically import BarCodeScanner only on native platforms
       const BarCodeScannerModule = await import('expo-barcode-scanner');
-      console.log('BarcodeScanner: Module loaded successfully:', !!BarCodeScannerModule.BarCodeScanner);
+      console.log('✅ BarcodeScanner: Module imported successfully');
+      console.log('🔍 BarcodeScanner: Module keys:', Object.keys(BarCodeScannerModule));
       
       const { BarCodeScanner } = BarCodeScannerModule;
+      console.log('🔍 BarcodeScanner: BarCodeScanner component:', !!BarCodeScanner);
       
       // Check if the module and required methods are available
       if (!BarCodeScanner) {
         throw new Error('BarCodeScanner component not found in module');
       }
       
+      console.log('🔍 BarcodeScanner: Available methods:', Object.getOwnPropertyNames(BarCodeScanner));
+      
       if (!BarCodeScanner.requestPermissionsAsync) {
-        throw new Error('BarCodeScanner.requestPermissionsAsync method not found');
+        console.error('❌ BarcodeScanner: requestPermissionsAsync method not found');
+        console.log('🔍 BarcodeScanner: Available static methods:', Object.getOwnPropertyNames(BarCodeScanner));
+        throw new Error('BarCodeScanner.requestPermissionsAsync method not found - module may not be properly linked');
       }
       
-      console.log('BarcodeScanner: Requesting permissions...');
+      console.log('🔍 BarcodeScanner: Requesting camera permissions...');
       const { status } = await BarCodeScanner.requestPermissionsAsync();
-      console.log('BarcodeScanner: Permission status:', status);
+      console.log('✅ BarcodeScanner: Permission status:', status);
       
-      setBarCodeScannerComponent(() => BarCodeScanner);
-      setHasPermission(status === 'granted');
-      setModuleError(null);
+      if (status === 'granted') {
+        setBarCodeScannerComponent(() => BarCodeScanner);
+        setHasPermission(true);
+        setModuleError(null);
+        console.log('✅ BarcodeScanner: Setup completed successfully');
+      } else {
+        setHasPermission(false);
+        console.log('❌ BarcodeScanner: Camera permission denied');
+      }
       
     } catch (error) {
-      console.error('BarcodeScanner: Error loading module or requesting permissions:', error);
+      console.error('❌ BarcodeScanner: Critical error during setup:', error);
       
-      // Set specific error messages for debugging
-      let errorMessage = 'BarCodeScanner module not available';
+      // Enhanced error logging for debugging
       if (error instanceof Error) {
-        errorMessage = error.message;
+        console.error('❌ BarcodeScanner: Error name:', error.name);
+        console.error('❌ BarcodeScanner: Error message:', error.message);
+        console.error('❌ BarcodeScanner: Error stack:', error.stack);
+      }
+      
+      // Check if this is a native module linking issue
+      let errorMessage = 'BarCodeScanner module not available';
+      let troubleshootingSteps = [];
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Cannot find native module')) {
+          errorMessage = 'Native module not found - rebuild required';
+          troubleshootingSteps = [
+            '1. Run: npx expo prebuild --clean',
+            '2. Run: npx expo run:android',
+            '3. Ensure expo-barcode-scanner is in package.json'
+          ];
+        } else if (error.message.includes('requestPermissionsAsync')) {
+          errorMessage = 'Module loaded but methods unavailable';
+          troubleshootingSteps = [
+            '1. Check if app.json has "expo-barcode-scanner" plugin',
+            '2. Rebuild with: npx expo prebuild && npx expo run:android',
+            '3. Verify Android permissions in AndroidManifest.xml'
+          ];
+        } else {
+          errorMessage = error.message;
+          troubleshootingSteps = [
+            '1. Restart Metro bundler',
+            '2. Clear cache: npx expo start --clear',
+            '3. Rebuild: npx expo run:android'
+          ];
+        }
       }
       
       setModuleError(errorMessage);
       setHasPermission(false);
       
-      // Show alert with detailed error information
+      // Show detailed error alert for debugging
       Alert.alert(
-        'Barcode Scanner Error',
-        `${errorMessage}\n\nPlease ensure:\n1. expo-barcode-scanner is installed\n2. App is rebuilt after installation\n3. Camera permissions are granted`,
+        'Barcode Scanner Setup Failed',
+        `${errorMessage}\n\nTroubleshooting:\n${troubleshootingSteps.join('\n')}\n\nYou can still enter barcodes manually.`,
         [
           { text: 'Use Manual Entry', onPress: () => setHasPermission(true) },
           { text: 'Close', onPress: onClose }
         ]
       );
+    } finally {
+      setModuleLoading(false);
     }
   };
 
@@ -92,11 +142,20 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
     setScanned(true);
     setScanning(false);
     
-    console.log('BarcodeScanner: Scanned barcode:', { type, data });
+    console.log('✅ BarcodeScanner: Successfully scanned barcode:', { type, data });
     
-    // Vibrate on successful scan (web-safe)
-    if (Platform.OS !== 'web' && 'vibrate' in navigator) {
-      navigator.vibrate(100);
+    // Provide haptic feedback if available
+    if (Platform.OS !== 'web') {
+      try {
+        // Try to use Haptics if available
+        import('expo-haptics').then(({ impactAsync, ImpactFeedbackStyle }) => {
+          impactAsync(ImpactFeedbackStyle.Medium);
+        }).catch(() => {
+          console.log('BarcodeScanner: Haptics not available');
+        });
+      } catch (error) {
+        console.log('BarcodeScanner: Could not provide haptic feedback');
+      }
     }
     
     onBarcodeScanned(data);
@@ -104,6 +163,7 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
 
   const handleManualSubmit = () => {
     if (manualBarcode.trim()) {
+      console.log('✅ BarcodeScanner: Manual barcode entered:', manualBarcode.trim());
       handleBarCodeScanned({ type: 'manual', data: manualBarcode.trim() });
     }
   };
@@ -118,7 +178,7 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
     return null;
   }
 
-  if (hasPermission === null) {
+  if (hasPermission === null || moduleLoading) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -129,13 +189,15 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
         </View>
         <View style={styles.permissionContainer}>
           <Package size={64} color={theme.colors.gray[400]} />
-          <Text style={styles.permissionText}>Initializing scanner...</Text>
+          <Text style={styles.permissionText}>
+            {moduleLoading ? 'Loading scanner module...' : 'Initializing scanner...'}
+          </Text>
         </View>
       </View>
     );
   }
 
-  if (hasPermission === false || moduleError) {
+  if (hasPermission === false && moduleError) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -146,14 +208,10 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
         </View>
         <View style={styles.permissionContainer}>
           <Package size={64} color={theme.colors.gray[400]} />
-          <Text style={styles.permissionTitle}>
-            {moduleError ? 'Scanner Not Available' : 'Camera Permission Required'}
-          </Text>
+          <Text style={styles.permissionTitle}>Scanner Not Available</Text>
           <Text style={styles.permissionText}>
-            {moduleError 
-              ? `${moduleError}\n\nYou can still enter barcodes manually below.`
-              : 'We need camera access to scan product barcodes and automatically add items to your pantry.'
-            }
+            {moduleError}
+            {'\n\n'}You can still enter barcodes manually below.
           </Text>
           
           {/* Manual input fallback */}
@@ -179,11 +237,9 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
             </View>
           </View>
           
-          {!moduleError && (
-            <TouchableOpacity style={styles.permissionButton} onPress={getBarCodeScannerPermissions}>
-              <Text style={styles.permissionButtonText}>Try Again</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity style={styles.permissionButton} onPress={getBarCodeScannerPermissions}>
+            <Text style={styles.permissionButtonText}>Try Again</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -273,6 +329,14 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
         <BarCodeScannerComponent
           onBarCodeScanned={scanning ? handleBarCodeScanned : undefined}
           style={styles.scanner}
+          barCodeTypes={[
+            BarCodeScannerComponent.Constants?.BarCodeType?.ean13,
+            BarCodeScannerComponent.Constants?.BarCodeType?.ean8,
+            BarCodeScannerComponent.Constants?.BarCodeType?.upc_a,
+            BarCodeScannerComponent.Constants?.BarCodeType?.upc_e,
+            BarCodeScannerComponent.Constants?.BarCodeType?.code128,
+            BarCodeScannerComponent.Constants?.BarCodeType?.code39,
+          ].filter(Boolean)}
         />
         
         {/* Scanning Overlay */}
@@ -326,6 +390,16 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
               </>
             )}
           </View>
+        </View>
+
+        {/* Manual Entry Fallback */}
+        <View style={styles.manualFallbackContainer}>
+          <TouchableOpacity 
+            style={styles.manualFallbackButton}
+            onPress={() => setHasPermission(false)}
+          >
+            <Text style={styles.manualFallbackText}>Enter Manually</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -552,7 +626,7 @@ const styles = StyleSheet.create({
   },
   instructionsContainer: {
     position: 'absolute',
-    bottom: 50,
+    bottom: 100,
     left: theme.spacing.lg,
     right: theme.spacing.lg,
   },
@@ -586,6 +660,24 @@ const styles = StyleSheet.create({
   },
   scanAgainText: {
     fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+    color: 'white',
+  },
+  manualFallbackContainer: {
+    position: 'absolute',
+    bottom: 20,
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+  },
+  manualFallbackButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    alignItems: 'center',
+  },
+  manualFallbackText: {
+    fontFamily: 'Inter-Medium',
     fontSize: 14,
     color: 'white',
   },

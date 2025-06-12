@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal, TextInput, Image, Alert } from 'react-native';
 import { usePantryItems } from '@/hooks/usePantryItems';
 import { theme } from '@/constants/theme';
-import { X, Package, Search, Plus, Edit3, Calendar, Tag, Hash } from 'lucide-react-native';
+import { X, Package, Search, Plus, CreditCard as Edit3, Calendar, Tag, Hash } from 'lucide-react-native';
 import { PantryItem, FoodCategory } from '@/types';
 import { getFoodImage } from '@/utils/foodImages';
 import { generateUniqueId } from '@/utils/idGenerator';

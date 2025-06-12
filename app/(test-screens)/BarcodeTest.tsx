@@ -25,31 +25,19 @@ export default function BarcodeTestScreen() {
     }
 
     try {
-      console.log('🔍 BarcodeTest: Loading expo-barcode-scanner module...');
+      console.log('🔍 BarcodeTest: Loading expo-camera module...');
       console.log('🔍 BarcodeTest: Platform:', Platform.OS);
       
       // Dynamically import BarCodeScanner
-      const BarCodeScannerModule = await import('expo-barcode-scanner');
+      const { CameraView } = await import('expo-camera');
       console.log('✅ BarcodeTest: Module imported successfully');
-      console.log('🔍 BarcodeTest: Module keys:', Object.keys(BarCodeScannerModule));
       
-      const { BarCodeScanner } = BarCodeScannerModule;
-      console.log('🔍 BarcodeTest: BarCodeScanner component:', !!BarCodeScanner);
-      
-      if (!BarCodeScanner) {
-        throw new Error('BarCodeScanner component not found in module');
+      if (!CameraView) {
+        throw new Error('CameraView component not found in module');
       }
       
-      if (!BarCodeScanner.requestPermissionsAsync) {
-        throw new Error('BarCodeScanner.requestPermissionsAsync method not found');
-      }
-      
-      console.log('🔍 BarcodeTest: Requesting camera permissions...');
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
-      console.log('✅ BarcodeTest: Permission status:', status);
-      
-      setBarCodeScannerComponent(() => BarCodeScanner);
-      setHasPermission(status === 'granted');
+      setBarCodeScannerComponent(() => CameraView);
+      setHasPermission(true);
       setModuleError(null);
       
     } catch (error) {
@@ -85,7 +73,7 @@ export default function BarcodeTestScreen() {
         <View style={styles.statusContainer}>
           <Zap size={48} color={theme.colors.primary} />
           <Text style={styles.statusTitle}>Loading Scanner Module</Text>
-          <Text style={styles.statusText}>Checking expo-barcode-scanner availability...</Text>
+          <Text style={styles.statusText}>Checking expo-camera availability...</Text>
         </View>
       );
     }
@@ -122,8 +110,11 @@ export default function BarcodeTestScreen() {
       return (
         <View style={styles.scannerContainer}>
           <BarCodeScannerComponent
-            onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
+            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
             style={styles.scanner}
+            barcodeScannerSettings={{
+              barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39'],
+            }}
           />
           
           <View style={styles.overlay}>

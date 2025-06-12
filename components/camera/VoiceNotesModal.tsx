@@ -173,7 +173,7 @@ export default function VoiceNotesModal({
     }
 
     try {
-      console.log('VoiceNotesModal: Starting recording on', Platform.OS);
+      console.log('🎤 VoiceNotesModal: Starting recording on', Platform.OS);
       setIsRecording(true);
       setRecordingDuration(0);
       
@@ -184,17 +184,22 @@ export default function VoiceNotesModal({
       if (Platform.OS === 'web') {
         audioChunksRef.current = [];
         
+        // Request audio with settings optimized for Whisper
         const stream = await navigator.mediaDevices.getUserMedia({ 
           audio: {
-            sampleRate: 16000,
-            channelCount: 1,
+            sampleRate: 16000,        // Whisper prefers 16kHz
+            channelCount: 1,          // Mono audio
             echoCancellation: true,
-            noiseSuppression: true
+            noiseSuppression: true,
+            autoGainControl: true,
           }
         });
         
+        // Use audio/webm with opus codec - widely supported and Whisper-compatible
+        const mimeType = 'audio/webm;codecs=opus';
         const mediaRecorder = new MediaRecorder(stream, {
-          mimeType: 'audio/webm;codecs=opus'
+          mimeType: mimeType,
+          audioBitsPerSecond: 128000, // Good quality for speech
         });
         
         mediaRecorderRef.current = mediaRecorder;
@@ -207,10 +212,11 @@ export default function VoiceNotesModal({
 
         mediaRecorder.onstop = async () => {
           try {
-            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+            const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
             const url = URL.createObjectURL(audioBlob);
             
-            console.log('VoiceNotesModal: Web audio recorded, size:', audioBlob.size, 'bytes');
+            console.log('🎤 VoiceNotesModal: Web audio recorded, size:', audioBlob.size, 'bytes');
+            console.log('🎤 VoiceNotesModal: MIME type:', mimeType);
             
             const voiceNote: VoiceNote = {
               id: generateUniqueId(),
@@ -218,7 +224,7 @@ export default function VoiceNotesModal({
               duration: recordingDuration,
               timestamp: new Date().toISOString(),
               processed: false,
-              mimeType: 'audio/webm;codecs=opus',
+              mimeType: mimeType,
             };
             
             onVoiceNoteAdded(voiceNote);
@@ -235,24 +241,26 @@ export default function VoiceNotesModal({
 
         mediaRecorder.start(1000);
       } else {
-        // Native recording with Android-optimized settings for Whisper
+        // Native recording with Whisper-optimized settings
         const recording = new Audio.Recording();
+        
+        // Configure recording settings for maximum Whisper compatibility
         await recording.prepareToRecordAsync({
           android: {
             extension: '.m4a',
             outputFormat: Audio.RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
             audioEncoder: Audio.RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
-            sampleRate: 16000,
-            numberOfChannels: 1,
-            bitRate: 128000,
+            sampleRate: 16000,      // Whisper's preferred sample rate
+            numberOfChannels: 1,    // Mono audio
+            bitRate: 128000,        // Good quality for speech
           },
           ios: {
             extension: '.m4a',
             outputFormat: Audio.RECORDING_OPTION_IOS_OUTPUT_FORMAT_MPEG4AAC,
             audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_HIGH,
-            sampleRate: 16000,
-            numberOfChannels: 1,
-            bitRate: 128000,
+            sampleRate: 16000,      // Whisper's preferred sample rate
+            numberOfChannels: 1,    // Mono audio
+            bitRate: 128000,        // Good quality for speech
             linearPCMBitDepth: 16,
             linearPCMIsBigEndian: false,
             linearPCMIsFloat: false,
@@ -265,7 +273,7 @@ export default function VoiceNotesModal({
         
         recordingRef.current = recording;
         await recording.startAsync();
-        console.log('VoiceNotesModal: Native recording started');
+        console.log('🎤 VoiceNotesModal: Native recording started with Whisper-optimized settings');
       }
     } catch (error) {
       console.error('VoiceNotesModal: Error starting recording:', error);
@@ -279,7 +287,7 @@ export default function VoiceNotesModal({
 
   const stopRecording = async () => {
     try {
-      console.log('VoiceNotesModal: Stopping recording');
+      console.log('🎤 VoiceNotesModal: Stopping recording');
       setIsRecording(false);
       
       if (durationInterval.current) {
@@ -297,7 +305,15 @@ export default function VoiceNotesModal({
           const uri = recordingRef.current.getURI();
           
           if (uri) {
-            console.log('VoiceNotesModal: Native recording stopped, URI:', uri);
+            console.log('🎤 VoiceNotesModal: Native recording stopped, URI:', uri);
+            
+            // Determine MIME type based on platform for better Whisper compatibility
+            let mimeType = 'audio/m4a';
+            if (Platform.OS === 'ios') {
+              mimeType = 'audio/m4a'; // iOS M4A is well-supported by Whisper
+            } else if (Platform.OS === 'android') {
+              mimeType = 'audio/m4a'; // Android M4A with AAC encoding
+            }
             
             const voiceNote: VoiceNote = {
               id: generateUniqueId(),
@@ -305,7 +321,7 @@ export default function VoiceNotesModal({
               duration: recordingDuration,
               timestamp: new Date().toISOString(),
               processed: false,
-              mimeType: Platform.OS === 'android' ? 'audio/m4a' : 'audio/mp4',
+              mimeType: mimeType,
             };
             
             onVoiceNoteAdded(voiceNote);
@@ -327,18 +343,23 @@ export default function VoiceNotesModal({
     setTranscribingNoteId(voiceNote.id);
     
     try {
-      console.log('VoiceNotesModal: Starting Whisper transcription for note:', voiceNote.id);
+      console.log('🎤 VoiceNotesModal: Starting Whisper transcription for note:', voiceNote.id);
+      console.log('🎤 VoiceNotesModal: Audio MIME type:', voiceNote.mimeType);
       
       const audioBase64 = await convertFileToBase64(voiceNote.uri);
-      console.log('VoiceNotesModal: Audio converted to base64, length:', audioBase64.length);
+      console.log('🎤 VoiceNotesModal: Audio converted to base64, length:', audioBase64.length);
       
-      // Normalize MIME type for better Whisper compatibility
-      let mimeType = voiceNote.mimeType;
-      if (Platform.OS === 'android') {
-        mimeType = 'audio/m4a';
-      } else if (voiceNote.mimeType === 'audio/mp4') {
-        mimeType = 'audio/m4a';
+      // Ensure we're sending the correct MIME type for Whisper compatibility
+      let whisperMimeType = voiceNote.mimeType;
+      
+      // Map platform-specific formats to Whisper-compatible ones
+      if (Platform.OS === 'web') {
+        whisperMimeType = 'audio/webm'; // Whisper supports webm
+      } else {
+        whisperMimeType = 'audio/m4a';  // Whisper supports m4a
       }
+      
+      console.log('🎤 VoiceNotesModal: Sending to Whisper with MIME type:', whisperMimeType);
       
       const response = await fetch('/api/voice-to-pantry', {
         method: 'POST',
@@ -347,7 +368,7 @@ export default function VoiceNotesModal({
         },
         body: JSON.stringify({
           audioBase64: audioBase64,
-          mimeType: mimeType || (Platform.OS === 'web' ? 'audio/webm;codecs=opus' : 'audio/m4a'),
+          mimeType: whisperMimeType,
         }),
       });
 
@@ -358,7 +379,7 @@ export default function VoiceNotesModal({
       }
 
       const result = await response.json();
-      console.log('VoiceNotesModal: Whisper transcription result:', result);
+      console.log('✅ VoiceNotesModal: Whisper transcription result:', result);
       
       // Update the voice note with transcription
       voiceNote.transcription = result.transcription || 'Transcription failed';
@@ -367,7 +388,7 @@ export default function VoiceNotesModal({
       onVoiceNoteAdded({ ...voiceNote });
       
     } catch (error) {
-      console.error('VoiceNotesModal: Whisper transcription error:', error);
+      console.error('❌ VoiceNotesModal: Whisper transcription error:', error);
       voiceNote.transcription = 'Failed to transcribe audio with Whisper';
       onVoiceNoteAdded({ ...voiceNote });
     } finally {
@@ -650,6 +671,15 @@ export default function VoiceNotesModal({
             <Text style={styles.recordingHint}>
               Say: "I bought 2 pounds of chicken, 1 gallon of milk, and 6 bananas"
             </Text>
+            
+            <View style={styles.formatInfo}>
+              <Text style={styles.formatTitle}>🎤 Whisper-Optimized Recording</Text>
+              <Text style={styles.formatText}>
+                • {Platform.OS === 'web' ? 'WebM/Opus' : 'M4A/AAC'} format for best compatibility{'\n'}
+                • 16kHz sample rate, mono audio{'\n'}
+                • Automatic transcription with OpenAI Whisper
+              </Text>
+            </View>
           </View>
 
           {/* Voice Notes List */}
@@ -693,6 +723,15 @@ export default function VoiceNotesModal({
                           </Text>
                         </View>
                       </View>
+                      
+                      {/* Audio Format Info */}
+                      {note.mimeType && (
+                        <View style={styles.formatBadge}>
+                          <Text style={styles.formatBadgeText}>
+                            {note.mimeType.includes('webm') ? 'WebM' : 'M4A'} • Whisper Ready
+                          </Text>
+                        </View>
+                      )}
                       
                       {transcribingNoteId === note.id ? (
                         <View style={styles.transcribingIndicator}>
@@ -971,6 +1010,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontStyle: 'italic',
+    marginBottom: theme.spacing.md,
+  },
+  formatInfo: {
+    backgroundColor: theme.colors.gray[100],
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    width: '100%',
+  },
+  formatTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  formatText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: theme.colors.gray[600],
+    lineHeight: 16,
   },
   notesSection: {
     marginBottom: theme.spacing.lg,
@@ -1051,6 +1109,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     fontSize: 12,
     color: theme.colors.gray[600],
+  },
+  formatBadge: {
+    backgroundColor: theme.colors.gray[100],
+    borderRadius: theme.borderRadius.sm,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    alignSelf: 'flex-start',
+    marginBottom: theme.spacing.xs,
+  },
+  formatBadgeText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 10,
+    color: theme.colors.primary,
   },
   transcribingIndicator: {
     flexDirection: 'row',

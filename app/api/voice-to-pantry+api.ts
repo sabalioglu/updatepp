@@ -33,32 +33,42 @@ export async function POST(request: Request) {
       }
 
       try {
-        // Use the provided mimeType or fallback to audio/mp4 for better compatibility
-        const audioMimeType = mimeType || 'audio/mp4';
-        
         console.log('🎤 OpenAI Whisper Transcription Request:', {
-          mimeType: audioMimeType,
+          mimeType: mimeType,
           audioBase64Length: audioBase64.length,
           apiKeyPresent: !!openaiApiKey,
           timestamp: new Date().toISOString()
         });
 
-        // Convert base64 to blob for FormData
+        // Convert base64 to buffer for FormData
         const audioBuffer = Buffer.from(audioBase64, 'base64');
-        const audioBlob = new Blob([audioBuffer], { type: audioMimeType });
+        console.log('🎤 Audio buffer size:', audioBuffer.length, 'bytes');
         
-        // Determine file extension based on MIME type
+        // Determine file extension and content type based on MIME type
         let fileExtension = '.m4a';
-        if (audioMimeType.includes('webm')) {
-          fileExtension = '.webm';
-        } else if (audioMimeType.includes('wav')) {
-          fileExtension = '.wav';
-        } else if (audioMimeType.includes('mp3')) {
-          fileExtension = '.mp3';
+        let contentType = 'audio/m4a';
+        
+        if (mimeType) {
+          if (mimeType.includes('webm')) {
+            fileExtension = '.webm';
+            contentType = 'audio/webm';
+          } else if (mimeType.includes('wav')) {
+            fileExtension = '.wav';
+            contentType = 'audio/wav';
+          } else if (mimeType.includes('mp3')) {
+            fileExtension = '.mp3';
+            contentType = 'audio/mp3';
+          } else if (mimeType.includes('m4a') || mimeType.includes('mp4')) {
+            fileExtension = '.m4a';
+            contentType = 'audio/m4a';
+          }
         }
+
+        console.log('🎤 Using file extension:', fileExtension, 'Content-Type:', contentType);
 
         // Create FormData for Whisper API
         const formData = new FormData();
+        const audioBlob = new Blob([audioBuffer], { type: contentType });
         formData.append('file', audioBlob, `voice${fileExtension}`);
         formData.append('model', 'whisper-1');
         formData.append('response_format', 'json');
@@ -94,8 +104,8 @@ export async function POST(request: Request) {
                 type: parsed.error.type,
                 message: parsed.error.message,
                 code: parsed.error.code,
-                mimeTypeUsed: audioMimeType,
-                audioSize: audioBase64.length,
+                mimeTypeUsed: contentType,
+                audioSize: audioBuffer.length,
                 platform: 'API Route'
               });
             }
@@ -111,8 +121,8 @@ export async function POST(request: Request) {
               pantryItems: [],
               debugInfo: {
                 service: 'OpenAI Whisper',
-                mimeType: audioMimeType,
-                audioSize: audioBase64.length,
+                mimeType: contentType,
+                audioSize: audioBuffer.length,
                 httpStatus: whisperResponse.status
               }
             }),
@@ -176,7 +186,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Step 2: Extract pantry items from transcription using OpenAI GPT-4.1 Mini
+    // Step 2: Extract pantry items from transcription using OpenAI GPT-4o-mini
     const openaiApiKey = process.env.OPENAI_API_KEY;
     
     if (!openaiApiKey) {
@@ -199,7 +209,7 @@ export async function POST(request: Request) {
     let extractionError = null;
 
     try {
-      console.log('🔍 Starting pantry item extraction with GPT-4.1 Mini...');
+      console.log('🔍 Starting pantry item extraction with GPT-4o-mini...');
       
       const extractionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -250,7 +260,7 @@ Rules:
         }),
       });
 
-      console.log('🔍 GPT-4.1 Mini Extraction Response Status:', extractionResponse.status);
+      console.log('🔍 GPT-4o-mini Extraction Response Status:', extractionResponse.status);
 
       if (extractionResponse.ok) {
         try {
@@ -265,13 +275,13 @@ Rules:
             summary = parsedResponse.summary || 'Items extracted from voice note';
             suggestions = Array.isArray(parsedResponse.suggestions) ? parsedResponse.suggestions : [];
             
-            console.log('✅ GPT-4.1 Mini Extraction Success:', {
+            console.log('✅ GPT-4o-mini Extraction Success:', {
               itemsFound: pantryItems.length,
               summary: summary
             });
           }
         } catch (parseError) {
-          console.error('💥 Error parsing GPT-4.1 Mini extraction response:', parseError);
+          console.error('💥 Error parsing GPT-4o-mini extraction response:', parseError);
           extractionError = 'Failed to parse pantry items from transcription';
           summary = "Could not extract pantry items from AI response.";
           suggestions = ["Please rephrase your voice note or try again."];
@@ -284,13 +294,13 @@ Rules:
           rawError = '[Unable to read error body]';
         }
         
-        console.log("❌ GPT-4.1 Mini Extraction API Raw Error:", rawError);
+        console.log("❌ GPT-4o-mini Extraction API Raw Error:", rawError);
 
         try {
           const parsed = JSON.parse(rawError);
-          console.log("🧠 GPT-4.1 Mini Extraction JSON Error:", parsed);
+          console.log("🧠 GPT-4o-mini Extraction JSON Error:", parsed);
         } catch (e) {
-          console.log("⚠️ GPT-4.1 Mini extraction response was not valid JSON.");
+          console.log("⚠️ GPT-4o-mini extraction response was not valid JSON.");
           console.log("📄 Raw error content:", rawError.substring(0, 500));
         }
 
@@ -299,7 +309,7 @@ Rules:
         suggestions = ["Please rephrase your voice note or try again."];
       }
     } catch (extractionRequestError) {
-      console.error('💥 GPT-4.1 Mini extraction request error:', extractionRequestError);
+      console.error('💥 GPT-4o-mini extraction request error:', extractionRequestError);
       console.error('🔧 Error Details:', {
         name: extractionRequestError.name,
         message: extractionRequestError.message
@@ -327,7 +337,7 @@ Rules:
       itemCount: response.pantryItems.length,
       hasError: !!response.error,
       transcriptionService: 'OpenAI Whisper',
-      extractionService: 'OpenAI GPT-4.1 Mini'
+      extractionService: 'OpenAI GPT-4o-mini'
     });
 
     return new Response(

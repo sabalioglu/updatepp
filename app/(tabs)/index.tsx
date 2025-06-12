@@ -11,7 +11,7 @@ import RecommendationCard from '@/components/profile/RecommendationCard';
 import QuickStatsCard from '@/components/profile/QuickStatsCard';
 import OnboardingModal from '@/components/profile/OnboardingModal';
 import { theme } from '@/constants/theme';
-import { Settings, TrendingUp, Heart, Clock, ChefHat, Calendar, ShoppingBag, Utensils } from 'lucide-react-native';
+import { Settings, TrendingUp, Heart, Clock, ChefHat, Calendar, ShoppingBag, Utensils, TestTube } from 'lucide-react-native';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -151,6 +151,21 @@ export default function ProfileScreen() {
               <Settings size={24} color={theme.colors.gray[600]} />
               <Text style={styles.featureTitle}>Settings</Text>
               <Text style={styles.featureDescription}>App preferences</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Developer Testing Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Developer Testing</Text>
+          <View style={styles.featuresGrid}>
+            <TouchableOpacity 
+              style={[styles.featureCard, styles.testCard]}
+              onPress={() => router.push('/(test-screens)/BarcodeTest')}
+            >
+              <TestTube size={24} color={theme.colors.warning} />
+              <Text style={styles.featureTitle}>Barcode Test</Text>
+              <Text style={styles.featureDescription}>Test barcode scanner functionality</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -322,6 +337,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '47%',
     ...theme.shadows.sm,
+  },
+  testCard: {
+    backgroundColor: theme.colors.expirySoon,
+    borderWidth: 2,
+    borderColor: theme.colors.warning,
   },
   featureTitle: {
     fontFamily: 'Inter-SemiBold',

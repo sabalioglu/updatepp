@@ -15,6 +15,7 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
   const [scanning, setScanning] = useState(true);
   const [manualBarcode, setManualBarcode] = useState('');
   const [BarCodeScannerComponent, setBarCodeScannerComponent] = useState<any>(null);
+  const [moduleError, setModuleError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -36,14 +37,52 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
     }
 
     try {
+      console.log('BarcodeScanner: Attempting to load expo-barcode-scanner...');
+      
       // Dynamically import BarCodeScanner only on native platforms
-      const { BarCodeScanner } = await import('expo-barcode-scanner');
-      setBarCodeScannerComponent(BarCodeScanner);
+      const BarCodeScannerModule = await import('expo-barcode-scanner');
+      console.log('BarcodeScanner: Module loaded successfully:', !!BarCodeScannerModule.BarCodeScanner);
+      
+      const { BarCodeScanner } = BarCodeScannerModule;
+      
+      // Check if the module and required methods are available
+      if (!BarCodeScanner) {
+        throw new Error('BarCodeScanner component not found in module');
+      }
+      
+      if (!BarCodeScanner.requestPermissionsAsync) {
+        throw new Error('BarCodeScanner.requestPermissionsAsync method not found');
+      }
+      
+      console.log('BarcodeScanner: Requesting permissions...');
       const { status } = await BarCodeScanner.requestPermissionsAsync();
+      console.log('BarcodeScanner: Permission status:', status);
+      
+      setBarCodeScannerComponent(() => BarCodeScanner);
       setHasPermission(status === 'granted');
+      setModuleError(null);
+      
     } catch (error) {
-      console.warn('BarCodeScanner not available:', error);
+      console.error('BarcodeScanner: Error loading module or requesting permissions:', error);
+      
+      // Set specific error messages for debugging
+      let errorMessage = 'BarCodeScanner module not available';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      setModuleError(errorMessage);
       setHasPermission(false);
+      
+      // Show alert with detailed error information
+      Alert.alert(
+        'Barcode Scanner Error',
+        `${errorMessage}\n\nPlease ensure:\n1. expo-barcode-scanner is installed\n2. App is rebuilt after installation\n3. Camera permissions are granted`,
+        [
+          { text: 'Use Manual Entry', onPress: () => setHasPermission(true) },
+          { text: 'Close', onPress: onClose }
+        ]
+      );
     }
   };
 
@@ -96,7 +135,7 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
     );
   }
 
-  if (hasPermission === false) {
+  if (hasPermission === false || moduleError) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -107,13 +146,44 @@ export default function BarcodeScanner({ visible, onClose, onBarcodeScanned }: B
         </View>
         <View style={styles.permissionContainer}>
           <Package size={64} color={theme.colors.gray[400]} />
-          <Text style={styles.permissionTitle}>Camera Permission Required</Text>
-          <Text style={styles.permissionText}>
-            We need camera access to scan product barcodes and automatically add items to your pantry.
+          <Text style={styles.permissionTitle}>
+            {moduleError ? 'Scanner Not Available' : 'Camera Permission Required'}
           </Text>
-          <TouchableOpacity style={styles.permissionButton} onPress={getBarCodeScannerPermissions}>
-            <Text style={styles.permissionButtonText}>Grant Permission</Text>
-          </TouchableOpacity>
+          <Text style={styles.permissionText}>
+            {moduleError 
+              ? `${moduleError}\n\nYou can still enter barcodes manually below.`
+              : 'We need camera access to scan product barcodes and automatically add items to your pantry.'
+            }
+          </Text>
+          
+          {/* Manual input fallback */}
+          <View style={styles.manualInputContainer}>
+            <Text style={styles.inputLabel}>Enter Barcode Manually:</Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.textInput}
+                value={manualBarcode}
+                onChangeText={setManualBarcode}
+                placeholder="Enter barcode number..."
+                placeholderTextColor={theme.colors.gray[400]}
+                keyboardType="numeric"
+                autoFocus
+              />
+              <TouchableOpacity 
+                style={[styles.submitButton, !manualBarcode.trim() && styles.submitButtonDisabled]} 
+                onPress={handleManualSubmit}
+                disabled={!manualBarcode.trim()}
+              >
+                <Search size={20} color="white" />
+              </TouchableOpacity>
+            </View>
+          </View>
+          
+          {!moduleError && (
+            <TouchableOpacity style={styles.permissionButton} onPress={getBarCodeScannerPermissions}>
+              <Text style={styles.permissionButtonText}>Try Again</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -313,48 +383,23 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.xl,
     borderRadius: theme.borderRadius.md,
+    marginTop: theme.spacing.md,
   },
   permissionButtonText: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 16,
     color: 'white',
   },
-  webContainer: {
-    flex: 1,
-    padding: theme.spacing.lg,
-    justifyContent: 'center',
-  },
-  webNotice: {
-    backgroundColor: 'rgba(255, 193, 7, 0.1)',
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.lg,
-    alignItems: 'center',
-    marginBottom: theme.spacing.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 193, 7, 0.3)',
-  },
-  webNoticeTitle: {
-    fontFamily: 'Poppins-SemiBold',
-    fontSize: 18,
-    color: theme.colors.warning,
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.xs,
-  },
-  webNoticeText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
   manualInputContainer: {
-    marginBottom: theme.spacing.xl,
+    width: '100%',
+    marginBottom: theme.spacing.lg,
   },
   inputLabel: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 16,
     color: 'white',
     marginBottom: theme.spacing.sm,
+    textAlign: 'center',
   },
   inputRow: {
     flexDirection: 'row',
@@ -383,6 +428,34 @@ const styles = StyleSheet.create({
   submitButtonDisabled: {
     backgroundColor: theme.colors.gray[600],
     opacity: 0.5,
+  },
+  webContainer: {
+    flex: 1,
+    padding: theme.spacing.lg,
+    justifyContent: 'center',
+  },
+  webNotice: {
+    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    alignItems: 'center',
+    marginBottom: theme.spacing.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 193, 7, 0.3)',
+  },
+  webNoticeTitle: {
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 18,
+    color: theme.colors.warning,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+  webNoticeText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   loadingContainer: {
     flex: 1,

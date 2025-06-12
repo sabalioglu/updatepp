@@ -1,4 +1,4 @@
-package com.helloworld
+package com.anonymous.pantrypal
 
 import android.app.Application
 import android.content.res.Configuration

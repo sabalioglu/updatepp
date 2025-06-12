@@ -20,7 +20,12 @@
       "expo-router",
       "expo-font",
       "expo-web-browser",
-      "expo-barcode-scanner"
+      [
+        "expo-barcode-scanner",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access camera for barcode scanning."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

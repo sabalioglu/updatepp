@@ -4,7 +4,6 @@
     "slug": "pantry-pal",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
     "scheme": "pantrypal",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,

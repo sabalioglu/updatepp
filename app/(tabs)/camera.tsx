@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Alert, Platform, Image, ScrollView } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import ScreenContainer from '@/components/common/ScreenContainer';
+import ScreenContainer from '../../components/common/ScreenContainer';
 import { Camera as CameraIcon, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator, Mic, Trash2, Package, QrCode } from 'lucide-react-native';
 
 const theme = {

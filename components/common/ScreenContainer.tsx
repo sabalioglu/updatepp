@@ -1,22 +1,47 @@
 import React from 'react';
-import { SafeAreaView, ViewProps } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, ScrollView, ViewStyle } from 'react-native';
 
-interface ScreenContainerProps extends ViewProps {
+interface ScreenContainerProps {
   children: React.ReactNode;
+  scrollable?: boolean;
+  style?: ViewStyle;
+  contentContainerStyle?: ViewStyle;
 }
 
-/**
- * Minimal wrapper that applies SafeArea padding only.
- * We can extend it later with custom theming or scroll behaviour.
- */
 export default function ScreenContainer({
   children,
+  scrollable = true,
   style,
-  ...rest
+  contentContainerStyle,
 }: ScreenContainerProps) {
   return (
-    <SafeAreaView style={[{ flex: 1, backgroundColor: '#fff' }, style]} {...rest}>
-      {children}
+    <SafeAreaView style={[styles.container, style]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      {scrollable ? (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.contentContainer, contentContainerStyle]}
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        <View style={[styles.contentContainer, contentContainerStyle]}>{children}</View>
+      )}
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
+    padding: 16,
+  },
+});

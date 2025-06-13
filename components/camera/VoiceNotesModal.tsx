@@ -1,13 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal, Alert, Platform } from 'react-native';
-import { usePantryItems } from '@/hooks/usePantryItems';
-import { theme } from '@/constants/theme';
+import { usePantryItems } from '../../hooks/usePantryItems';
+import { theme } from '../../constants/theme';
 import { X, Mic, Square, Play, Pause, Trash2, Clock, FileAudio, Plus, Sparkles, Check, MessageSquare, Zap } from 'lucide-react-native';
-import { PantryItem, FoodCategory } from '@/types';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
-import { getFoodImage } from '../../utils/foodImages';
-import { generateUniqueId } from '../../utils/idGenerator';
 
 interface VoiceNote {
   id: string;

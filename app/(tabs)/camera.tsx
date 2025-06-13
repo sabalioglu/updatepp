@@ -3,60 +3,45 @@ import { StyleSheet, Text, View, TouchableOpacity, Alert, Platform, Image, Scrol
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import ScreenContainer from '@/components/common/ScreenContainer';
-import Header from '@/components/common/Header';
-import FoodAnalysisModal from '@/components/camera/FoodAnalysisModal';
-import CalorieCounterModal from '@/components/camera/CalorieCounterModal';
-import VoiceNotesModal from '@/components/camera/VoiceNotesModal';
-import BarcodeScanner from '@/components/camera/BarcodeScanner';
-import ProductLookupModal from '@/components/camera/ProductLookupModal';
-import { theme } from '@/constants/theme';
 import { Camera as CameraIcon, FlashlightOff as FlashOff, Zap as Flash, X, Check, RotateCw, Sparkles, Calculator, Mic, Trash2, Package, QrCode } from 'lucide-react-native';
-import * as FileSystem from 'expo-file-system';
+
+const theme = {
+  colors: {
+    primary: '#E67E22',
+    secondary: '#7D9D9C',
+    accent: '#5EAAA8',
+    success: '#4CAF50',
+    warning: '#FFC107',
+    error: '#F44336',
+    background: '#FFFFFF',
+    text: '#333333',
+    gray: {
+      100: '#F5F5F5',
+      200: '#EEEEEE',
+      300: '#E0E0E0',
+      400: '#BDBDBD',
+      500: '#9E9E9E',
+      600: '#757575',
+      700: '#616161',
+    }
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 32,
+  },
+  borderRadius: {
+    sm: 4,
+    md: 8,
+    lg: 12,
+    round: 9999,
+  }
+};
 
 type CaptureMode = 'photo' | 'multi-photo' | 'barcode';
 type FlashMode = 'off' | 'on' | 'auto';
-
-interface FoodAnalysisResult {
-  identifiedFoods: string[];
-  freshnessAssessment: string;
-  suggestedRecipes: Array<{
-    name: string;
-    description: string;
-    mainIngredients: string[];
-    cookTime: string;
-    difficulty: string;
-  }>;
-  storageTips: string[];
-  complementaryIngredients: string[];
-}
-
-interface CalorieAnalysisResult {
-  identifiedFoods: Array<{
-    name: string;
-    quantity: string;
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-    fiber: number;
-  }>;
-  totalCalories: number;
-  totalProtein: number;
-  totalCarbs: number;
-  totalFat: number;
-  totalFiber: number;
-  mealType: string;
-  healthScore: number;
-  nutritionalTips: string[];
-}
-
-interface VoiceNote {
-  id: string;
-  uri: string;
-  duration: number;
-  timestamp: string;
-  transcription?: string;
-}
 
 export default function CameraScreen() {
   const router = useRouter();
@@ -65,18 +50,7 @@ export default function CameraScreen() {
   const [captureMode, setCaptureMode] = useState<CaptureMode>('photo');
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
   const [capturedMedia, setCapturedMedia] = useState<string[]>([]);
-  const [voiceNotes, setVoiceNotes] = useState<VoiceNote[]>([]);
   const [showPreview, setShowPreview] = useState(false);
-  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
-  const [showCalorieModal, setShowCalorieModal] = useState(false);
-  const [showVoiceModal, setShowVoiceModal] = useState(false);
-  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
-  const [showProductLookup, setShowProductLookup] = useState(false);
-  const [scannedBarcode, setScannedBarcode] = useState('');
-  const [analysisResult, setAnalysisResult] = useState<FoodAnalysisResult | null>(null);
-  const [calorieResult, setCalorieResult] = useState<CalorieAnalysisResult | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [showInfoCard, setShowInfoCard] = useState(true);
   const cameraRef = useRef<CameraView>(null);
 
@@ -87,7 +61,6 @@ export default function CameraScreen() {
   if (!cameraPermission) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Voice Notes\" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>Loading permissions...</Text>
         </View>
@@ -99,7 +72,6 @@ export default function CameraScreen() {
   if (!cameraPermission.granted) {
     return (
       <ScreenContainer>
-        <Header title="Camera & Voice Notes" showBack onBackPress={() => router.back()} />
         <View style={styles.permissionContainer}>
           <CameraIcon size={64} color={theme.colors.gray[400]} />
           <Text style={styles.permissionTitle}>Camera Permission Required</Text>
@@ -127,11 +99,6 @@ export default function CameraScreen() {
     // Clear captured media when switching modes
     setCapturedMedia([]);
     setShowPreview(false);
-    
-    // Show barcode scanner immediately when switching to barcode mode
-    if (modes[nextIndex] === 'barcode') {
-      setShowBarcodeScanner(true);
-    }
   };
 
   const toggleFlashMode = () => {
@@ -180,11 +147,7 @@ export default function CameraScreen() {
 
   const retakePhotos = () => {
     setCapturedMedia([]);
-    setVoiceNotes([]);
     setShowPreview(false);
-    setAnalysisResult(null);
-    setCalorieResult(null);
-    setAnalysisError(null);
   };
 
   const addMorePhotos = () => {
@@ -192,118 +155,12 @@ export default function CameraScreen() {
     setShowPreview(false);
   };
 
-  const handleBarcodeScanned = (barcode: string) => {
-    console.log('CameraScreen: Barcode scanned:', barcode);
-    setScannedBarcode(barcode);
-    setShowBarcodeScanner(false);
-    setShowProductLookup(true);
-  };
-
-  const convertImageToBase64 = async (imageUri: string): Promise<string> => {
-    if (Platform.OS === 'web') {
-      try {
-        const response = await fetch(imageUri);
-        const blob = await response.blob();
-        
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64String = reader.result as string;
-            const base64Data = base64String.split(',')[1];
-            resolve(base64Data);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      } catch (error) {
-        throw new Error('Failed to convert image to base64 on web platform');
-      }
-    } else {
-      return await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-    }
-  };
-
   const analyzeFood = async () => {
-    if (capturedMedia.length === 0) {
-      setAnalysisError('No photos to analyze');
-      return;
-    }
-
-    setAnalysisLoading(true);
-    setAnalysisError(null);
-    setShowAnalysisModal(true);
-
-    try {
-      // For multiple photos, we'll analyze the first one for now
-      // In a real implementation, you might want to combine all photos or analyze them separately
-      const base64 = await convertImageToBase64(capturedMedia[0]);
-
-      const response = await fetch('/api/food-recognition', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          imageBase64: base64,
-          photoCount: capturedMedia.length,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to analyze image');
-      }
-
-      const result = await response.json();
-      setAnalysisResult(result);
-    } catch (error) {
-      console.error('Food analysis error:', error);
-      setAnalysisError(error instanceof Error ? error.message : 'Failed to analyze food image');
-    } finally {
-      setAnalysisLoading(false);
-    }
+    Alert.alert('Feature Coming Soon', 'Food analysis will be available in a future update.');
   };
 
   const countCalories = async () => {
-    if (capturedMedia.length === 0) {
-      setAnalysisError('No photos to analyze');
-      return;
-    }
-
-    setAnalysisLoading(true);
-    setAnalysisError(null);
-    setShowCalorieModal(true);
-
-    try {
-      // For multiple photos, analyze the first one
-      const base64 = await convertImageToBase64(capturedMedia[0]);
-
-      const response = await fetch('/api/calorie-counter', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          imageBase64: base64,
-          photoCount: capturedMedia.length,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to analyze calories');
-      }
-
-      const result = await response.json();
-      setCalorieResult(result);
-    } catch (error) {
-      console.error('Calorie analysis error:', error);
-      setAnalysisError(error instanceof Error ? error.message : 'Failed to analyze calories');
-    } finally {
-      setAnalysisLoading(false);
-    }
+    Alert.alert('Feature Coming Soon', 'Calorie counting will be available in a future update.');
   };
 
   const addToPantry = async () => {
@@ -312,8 +169,6 @@ export default function CameraScreen() {
       return;
     }
 
-    // For now, we'll show a success message
-    // In a real implementation, this would process the photos and add items to pantry
     Alert.alert(
       'Added to Pantry',
       `${capturedMedia.length} photo${capturedMedia.length !== 1 ? 's' : ''} processed and items added to your pantry!`,
@@ -330,22 +185,13 @@ export default function CameraScreen() {
       );
       return;
     }
-    setShowVoiceModal(true);
-  };
-
-  const handleVoiceNoteAdded = (voiceNote: VoiceNote) => {
-    setVoiceNotes(prev => [...prev, voiceNote]);
-  };
-
-  const handleVoiceNoteDeleted = (voiceNoteId: string) => {
-    setVoiceNotes(prev => prev.filter(note => note.id !== voiceNoteId));
   };
 
   const saveMedia = () => {
     if (Platform.OS !== 'web') {
       Alert.alert(
         'Media Saved',
-        `${capturedMedia.length} photo${capturedMedia.length !== 1 ? 's' : ''} and ${voiceNotes.length} voice note${voiceNotes.length !== 1 ? 's' : ''} saved successfully!`,
+        `${capturedMedia.length} photo${capturedMedia.length !== 1 ? 's' : ''} saved successfully!`,
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } else {
@@ -376,17 +222,6 @@ export default function CameraScreen() {
       default: return 'Single';
     }
   };
-
-  // Show barcode scanner
-  if (showBarcodeScanner) {
-    return (
-      <BarcodeScanner
-        visible={showBarcodeScanner}
-        onClose={() => setShowBarcodeScanner(false)}
-        onBarcodeScanned={handleBarcodeScanned}
-      />
-    );
-  }
 
   // Multi-photo preview mode
   if (showPreview && captureMode === 'multi-photo') {
@@ -474,40 +309,7 @@ export default function CameraScreen() {
               ]}>Voice Notes</Text>
             </TouchableOpacity>
           </View>
-
-          {voiceNotes.length > 0 && (
-            <View style={styles.voiceNotesIndicator}>
-              <Mic size={16} color={theme.colors.warning} />
-              <Text style={styles.voiceNotesText}>
-                {voiceNotes.length} voice note{voiceNotes.length !== 1 ? 's' : ''} recorded
-              </Text>
-            </View>
-          )}
         </View>
-
-        <FoodAnalysisModal
-          visible={showAnalysisModal}
-          onClose={() => setShowAnalysisModal(false)}
-          analysisResult={analysisResult}
-          loading={analysisLoading}
-          error={analysisError}
-        />
-
-        <CalorieCounterModal
-          visible={showCalorieModal}
-          onClose={() => setShowCalorieModal(false)}
-          analysisResult={calorieResult}
-          loading={analysisLoading}
-          error={analysisError}
-        />
-
-        <VoiceNotesModal
-          visible={showVoiceModal}
-          onClose={() => setShowVoiceModal(false)}
-          voiceNotes={voiceNotes}
-          onVoiceNoteAdded={handleVoiceNoteAdded}
-          onVoiceNoteDeleted={handleVoiceNoteDeleted}
-        />
       </ScreenContainer>
     );
   }
@@ -519,12 +321,6 @@ export default function CameraScreen() {
         <View style={styles.previewContainer}>
           <View style={styles.photoPreviewContainer}>
             <Image source={{ uri: capturedMedia[0] }} style={styles.previewMedia} />
-            {voiceNotes.length > 0 && (
-              <View style={styles.voiceCounter}>
-                <Mic size={16} color="white" />
-                <Text style={styles.voiceCounterText}>{voiceNotes.length}</Text>
-              </View>
-            )}
           </View>
           
           <View style={styles.previewActions}>
@@ -566,30 +362,6 @@ export default function CameraScreen() {
             </TouchableOpacity>
           </View>
         </View>
-
-        <FoodAnalysisModal
-          visible={showAnalysisModal}
-          onClose={() => setShowAnalysisModal(false)}
-          analysisResult={analysisResult}
-          loading={analysisLoading}
-          error={analysisError}
-        />
-
-        <CalorieCounterModal
-          visible={showCalorieModal}
-          onClose={() => setShowCalorieModal(false)}
-          analysisResult={calorieResult}
-          loading={analysisLoading}
-          error={analysisError}
-        />
-
-        <VoiceNotesModal
-          visible={showVoiceModal}
-          onClose={() => setShowVoiceModal(false)}
-          voiceNotes={voiceNotes}
-          onVoiceNoteAdded={handleVoiceNoteAdded}
-          onVoiceNoteDeleted={handleVoiceNoteDeleted}
-        />
       </ScreenContainer>
     );
   }
@@ -597,8 +369,6 @@ export default function CameraScreen() {
   // Camera view
   return (
     <ScreenContainer scrollable={false} style={styles.container}>
-      <Header title="Smart Camera & Scanner" showBack onBackPress={() => router.back()} />
-      
       <View style={styles.cameraContainer}>
         <CameraView 
           ref={cameraRef}
@@ -684,7 +454,7 @@ export default function CameraScreen() {
             ) : (
               <TouchableOpacity 
                 style={styles.barcodeButton} 
-                onPress={() => setShowBarcodeScanner(true)}
+                onPress={() => Alert.alert('Feature Coming Soon', 'Barcode scanning will be available in a future update.')}
               >
                 <QrCode size={32} color="white" />
               </TouchableOpacity>
@@ -707,20 +477,6 @@ export default function CameraScreen() {
           </View>
         </CameraView>
       </View>
-
-      <VoiceNotesModal
-        visible={showVoiceModal}
-        onClose={() => setShowVoiceModal(false)}
-        voiceNotes={voiceNotes}
-        onVoiceNoteAdded={handleVoiceNoteAdded}
-        onVoiceNoteDeleted={handleVoiceNoteDeleted}
-      />
-
-      <ProductLookupModal
-        visible={showProductLookup}
-        onClose={() => setShowProductLookup(false)}
-        barcode={scannedBarcode}
-      />
     </ScreenContainer>
   );
 }
@@ -1018,18 +774,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'white',
   },
-  voiceNotesIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: theme.spacing.sm,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    gap: theme.spacing.xs,
+  analyzeButton: {
+    backgroundColor: theme.colors.secondary,
   },
-  voiceNotesText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 12,
-    color: theme.colors.warning,
+  calorieButton: {
+    backgroundColor: theme.colors.accent,
+  },
+  pantryButton: {
+    backgroundColor: theme.colors.primary,
+  },
+  voiceButton: {
+    backgroundColor: theme.colors.warning,
+  },
+  useButton: {
+    backgroundColor: theme.colors.success,
   },
   // Single photo preview styles
   previewContainer: {
@@ -1043,23 +801,6 @@ const styles = StyleSheet.create({
   previewMedia: {
     flex: 1,
     width: '100%',
-  },
-  voiceCounter: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  voiceCounterText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 12,
-    color: 'white',
   },
   previewActions: {
     position: 'absolute',
@@ -1077,21 +818,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xs,
     alignItems: 'center',
     minWidth: 60,
-  },
-  analyzeButton: {
-    backgroundColor: theme.colors.secondary,
-  },
-  calorieButton: {
-    backgroundColor: theme.colors.accent,
-  },
-  pantryButton: {
-    backgroundColor: theme.colors.primary,
-  },
-  voiceButton: {
-    backgroundColor: theme.colors.warning,
-  },
-  useButton: {
-    backgroundColor: theme.colors.success,
   },
   previewActionText: {
     fontFamily: 'Inter-Medium',
